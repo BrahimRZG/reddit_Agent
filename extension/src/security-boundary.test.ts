@@ -1,14 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
-import { execSync } from 'child_process';
+import { readFileSync, readdirSync, statSync } from 'fs';
+import { join, resolve } from 'path';
 
-const ROOT = resolve(__dirname, '../../..');
+const EXTENSION_ROOT = resolve(__dirname, '..');
+const REPO_ROOT = resolve(EXTENSION_ROOT, '..');
 
 describe('Security boundary verification', () => {
   describe('manifest.json', () => {
     const manifest = JSON.parse(
-      readFileSync(resolve(ROOT, 'extension/manifest.json'), 'utf-8')
+      readFileSync(resolve(EXTENSION_ROOT, 'manifest.json'), 'utf-8')
     );
 
     it('has no content_scripts', () => {
@@ -37,79 +37,84 @@ describe('Security boundary verification', () => {
   });
 
   describe('Extension source code', () => {
-    const extensionSrc = resolve(ROOT, 'extension/src');
+    const extensionSrc = resolve(EXTENSION_ROOT, 'src');
 
     it('contains no API_KEY references', () => {
-      const result = grepRecursive(extensionSrc, 'API_KEY');
-      expect(result).toBe('');
+      const result = searchSourceFiles(extensionSrc, 'API_KEY');
+      expect(result).toEqual([]);
     });
 
     it('contains no OPENAI references', () => {
-      const result = grepRecursive(extensionSrc, 'OPENAI');
-      expect(result).toBe('');
+      const result = searchSourceFiles(extensionSrc, 'OPENAI');
+      expect(result).toEqual([]);
     });
 
     it('contains no REDDIT_CLIENT references', () => {
-      const result = grepRecursive(extensionSrc, 'REDDIT_CLIENT');
-      expect(result).toBe('');
+      const result = searchSourceFiles(extensionSrc, 'REDDIT_CLIENT');
+      expect(result).toEqual([]);
     });
 
-    it('contains no hardcoded SECRET values (excluding StorageError class name)', () => {
-      // grep for SECRET but exclude the StorageError class definition and test files
-      const result = grepRecursive(extensionSrc, 'SECRET', ['*.test.ts']);
-      expect(result).toBe('');
+    it('contains no hardcoded SECRET references', () => {
+      const result = searchSourceFiles(extensionSrc, 'SECRET');
+      expect(result).toEqual([]);
     });
   });
 
   describe('wrangler.toml', () => {
     const wranglerContent = readFileSync(
-      resolve(ROOT, 'worker-api/wrangler.toml'),
+      resolve(REPO_ROOT, 'worker-api/wrangler.toml'),
       'utf-8'
     );
 
+    const activeLines = wranglerContent
+      .split('\n')
+      .filter((line: string) => !line.trimStart().startsWith('#'))
+      .join('\n');
+
     it('has no active D1 database bindings', () => {
-      // Active (uncommented) d1_databases binding
-      const activeD1 = wranglerContent
-        .split('\n')
-        .filter((line) => !line.trimStart().startsWith('#'))
-        .join('\n');
-      expect(activeD1).not.toContain('[[d1_databases]]');
+      expect(activeLines).not.toContain('[[d1_databases]]');
     });
 
     it('has no active KV namespace bindings', () => {
-      const activeLines = wranglerContent
-        .split('\n')
-        .filter((line) => !line.trimStart().startsWith('#'))
-        .join('\n');
       expect(activeLines).not.toContain('[[kv_namespaces]]');
     });
 
     it('has no active [vars] section with secrets', () => {
-      const activeLines = wranglerContent
-        .split('\n')
-        .filter((line) => !line.trimStart().startsWith('#'))
-        .join('\n');
       expect(activeLines).not.toContain('[vars]');
     });
   });
 });
 
-/**
- * Helper: grep recursively in a directory for a pattern.
- * Returns matching lines or empty string if no matches.
- * Excludes .test.ts files and node_modules.
- */
-function grepRecursive(dir: string, pattern: string, excludeGlobs: string[] = []): string {
-  try {
-    let cmd = `grep -r "${pattern}" "${dir}" --include="*.ts" --include="*.tsx" --exclude-dir=node_modules`;
-    for (const glob of excludeGlobs) {
-      cmd += ` --exclude="${glob}"`;
+function searchSourceFiles(dir: string, pattern: string): string[] {
+  const matches: string[] = [];
+
+  for (const entry of readdirSync(dir)) {
+    const fullPath = join(dir, entry);
+    const stat = statSync(fullPath);
+
+    if (stat.isDirectory()) {
+      if (entry === 'node_modules' || entry === 'dist') {
+        continue;
+      }
+
+      matches.push(...searchSourceFiles(fullPath, pattern));
+      continue;
     }
-    // Also exclude test files from false positives
-    cmd += ' --exclude="*.test.ts"';
-    return execSync(cmd, { encoding: 'utf-8' }).trim();
-  } catch {
-    // grep returns exit code 1 when no matches — that's success for us
-    return '';
+
+    if (!entry.endsWith('.ts') && !entry.endsWith('.tsx')) {
+      continue;
+    }
+
+    if (entry.endsWith('.test.ts') || entry.endsWith('.test.tsx')) {
+      continue;
+    }
+
+    const content = readFileSync(fullPath, 'utf-8');
+
+    if (content.includes(pattern)) {
+      matches.push(fullPath);
+    }
   }
+
+  return matches;
 }
