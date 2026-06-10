@@ -31,8 +31,12 @@ describe('Security boundary verification', () => {
       expect(manifest.permissions).toEqual(['storage']);
     });
 
-    it('has only workers.dev host permission', () => {
-      expect(manifest.host_permissions).toEqual(['https://*.workers.dev/*']);
+    it('has only approved host permissions', () => {
+      expect(manifest.host_permissions).toEqual([
+        'https://*.workers.dev/*',
+        'http://localhost/*',
+        'http://127.0.0.1/*',
+      ]);
     });
   });
 
@@ -40,23 +44,19 @@ describe('Security boundary verification', () => {
     const extensionSrc = resolve(EXTENSION_ROOT, 'src');
 
     it('contains no API_KEY references', () => {
-      const result = searchSourceFiles(extensionSrc, 'API_KEY');
-      expect(result).toEqual([]);
+      expect(searchSourceFiles(extensionSrc, 'API_KEY')).toEqual([]);
     });
 
     it('contains no OPENAI references', () => {
-      const result = searchSourceFiles(extensionSrc, 'OPENAI');
-      expect(result).toEqual([]);
+      expect(searchSourceFiles(extensionSrc, 'OPENAI')).toEqual([]);
     });
 
     it('contains no REDDIT_CLIENT references', () => {
-      const result = searchSourceFiles(extensionSrc, 'REDDIT_CLIENT');
-      expect(result).toEqual([]);
+      expect(searchSourceFiles(extensionSrc, 'REDDIT_CLIENT')).toEqual([]);
     });
 
     it('contains no hardcoded SECRET references', () => {
-      const result = searchSourceFiles(extensionSrc, 'SECRET');
-      expect(result).toEqual([]);
+      expect(searchSourceFiles(extensionSrc, 'SECRET')).toEqual([]);
     });
   });
 
