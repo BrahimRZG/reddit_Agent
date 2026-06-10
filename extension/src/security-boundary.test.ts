@@ -3,7 +3,7 @@ import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { execSync } from 'child_process';
 
-const ROOT = resolve(__dirname, '../../..');
+const ROOT = resolve(__dirname, '../..');
 
 describe('Security boundary verification', () => {
   describe('manifest.json', () => {
@@ -31,7 +31,7 @@ describe('Security boundary verification', () => {
       expect(manifest.permissions).toEqual(['storage']);
     });
 
-    it('has only workers.dev host permission', () => {
+    it('has only approved Worker host permission', () => {
       expect(manifest.host_permissions).toEqual(['https://*.workers.dev/*']);
     });
   });

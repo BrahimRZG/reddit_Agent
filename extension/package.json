@@ -4,12 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && npm run copy-static",
     "dev": "vite",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/ --ext .ts,.tsx",
     "test": "vitest --run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "copy-static": "cp manifest.json dist/manifest.json && mkdir -p dist/icons && cp -r public/icons/* dist/icons/"
   },
   "dependencies": {
     "react": "^18.3.0",

@@ -2,7 +2,7 @@ import type { Context, Next } from 'hono';
 import { hashToken, constantTimeEqual } from '../lib/crypto';
 import { checkRateLimit } from '../services/rate-limit-service';
 import { isNonceUsed, insertNonce, maybeCleanExpiredNonces } from '../services/nonce-service';
-import type { Env } from '../types';
+import type { Env, InstallTokenRow, Variables } from '../types';
 
 /**
  * Bearer-token authentication middleware for protected routes.
@@ -18,7 +18,7 @@ import type { Env } from '../types';
  *   9. Insert nonce
  *  10. Set installId on context, proceed
  */
-export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) {
+export async function authMiddleware(c: Context<{ Bindings: Env; Variables: Variables }>, next: Next) {
   const authHeader = c.req.header('Authorization');
   const installId = c.req.header('X-Install-Id');
   const timestamp = c.req.header('X-Timestamp');
