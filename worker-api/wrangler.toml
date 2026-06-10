@@ -1,0 +1,10 @@
+name = "reddit-marketing-agent-api"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+# No bindings in Spec 01
+# TODO: Spec 02 - Worker Auth & Token Lifecycle
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "..."
+# database_id = "..."
