@@ -1,14 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
-import { execSync } from 'child_process';
+import { readFileSync, readdirSync, statSync } from 'fs';
+import { join, resolve } from 'path';
 
 const ROOT = resolve(__dirname, '../..');
 
 describe('Security boundary verification', () => {
   describe('manifest.json', () => {
     const manifest = JSON.parse(
-      readFileSync(resolve(ROOT, 'extension/manifest.json'), 'utf-8')
+      readFileSync(resolve(EXTENSION_ROOT, 'manifest.json'), 'utf-8')
     );
 
     it('has no content_scripts', () => {
@@ -74,7 +73,7 @@ describe('Security boundary verification', () => {
 
   describe('wrangler.toml — allowed bindings only', () => {
     const wranglerContent = readFileSync(
-      resolve(ROOT, 'worker-api/wrangler.toml'),
+      resolve(REPO_ROOT, 'worker-api/wrangler.toml'),
       'utf-8'
     );
     const activeLines = wranglerContent
@@ -116,4 +115,6 @@ function grepSource(dir: string, pattern: string): string {
   } catch {
     return '';
   }
+
+  return matches;
 }
