@@ -9,7 +9,7 @@ describe('POST /v1/admin/provision-token', () => {
       method: 'POST',
     });
     expect(res.status).toBe(401);
-    const body = await res.json();
+    const body = (await res.json()) as any;
     expect(body.error.code).toBe('UNAUTHORIZED');
   });
 
@@ -19,7 +19,7 @@ describe('POST /v1/admin/provision-token', () => {
       headers: { 'X-Admin-Secret': 'wrong-secret' },
     });
     expect(res.status).toBe(401);
-    const body = await res.json();
+    const body = (await res.json()) as any;
     expect(body.error.code).toBe('UNAUTHORIZED');
   });
 
@@ -47,7 +47,7 @@ describe('POST /v1/admin/revoke-token', () => {
       body: JSON.stringify({ install_id: 'test-id' }),
     });
     expect(res.status).toBe(401);
-    const body = await res.json();
+    const body = (await res.json()) as any;
     expect(body.error.code).toBe('UNAUTHORIZED');
   });
 
@@ -61,7 +61,7 @@ describe('POST /v1/admin/revoke-token', () => {
       body: JSON.stringify({ install_id: 'test-id' }),
     });
     expect(res.status).toBe(401);
-    const body = await res.json();
+    const body = (await res.json()) as any;
     expect(body.error.code).toBe('UNAUTHORIZED');
   });
 });
