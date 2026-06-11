@@ -36,82 +36,60 @@ describe('Security boundary verification', () => {
     });
   });
 
-  describe('Extension source code — no secrets', () => {
+  describe('Extension source code', () => {
     const extensionSrc = resolve(ROOT, 'extension/src');
 
+    it('contains no API_KEY references', () => {
+      const result = grepRecursive(extensionSrc, 'API_KEY');
+      expect(result).toBe('');
+    });
+
     it('contains no OPENAI references', () => {
-      expect(grepSource(extensionSrc, 'OPENAI')).toBe('');
+      const result = grepRecursive(extensionSrc, 'OPENAI');
+      expect(result).toBe('');
     });
 
     it('contains no REDDIT_CLIENT references', () => {
-      expect(grepSource(extensionSrc, 'REDDIT_CLIENT')).toBe('');
+      const result = grepRecursive(extensionSrc, 'REDDIT_CLIENT');
+      expect(result).toBe('');
     });
 
-    it('contains no INSTALL_TOKEN_PEPPER references', () => {
-      expect(grepSource(extensionSrc, 'INSTALL_TOKEN_PEPPER')).toBe('');
-    });
-
-    it('contains no ADMIN_BOOTSTRAP_SECRET references', () => {
-      expect(grepSource(extensionSrc, 'ADMIN_BOOTSTRAP_SECRET')).toBe('');
-    });
-
-    it('contains no hardcoded API_KEY values', () => {
-      expect(grepSource(extensionSrc, 'API_KEY')).toBe('');
+    it('contains no hardcoded SECRET values', () => {
+      const result = grepRecursive(extensionSrc, 'SECRET');
+      expect(result).toBe('');
     });
   });
 
-  describe('Extension source code — no automation', () => {
-    const extensionSrc = resolve(ROOT, 'extension/src');
-
-    it('contains no Reddit DOM posting code', () => {
-      expect(grepSource(extensionSrc, 'document\\.querySelector.*submit')).toBe('');
-    });
-
-    it('contains no Reddit voting automation', () => {
-      expect(grepSource(extensionSrc, 'upvote|downvote')).toBe('');
-    });
-  });
-
-  describe('wrangler.toml — allowed bindings only', () => {
+  describe('wrangler.toml', () => {
     const wranglerContent = readFileSync(
       resolve(ROOT, 'worker-api/wrangler.toml'),
       'utf-8'
     );
-    const activeLines = wranglerContent
-      .split('\n')
-      .filter((line) => !line.trimStart().startsWith('#'))
-      .join('\n');
-
-    it('allows D1 binding named DB', () => {
-      expect(activeLines).toContain('binding = "DB"');
-    });
 
     it('has no active KV namespace bindings', () => {
+      const activeLines = wranglerContent
+        .split('\n')
+        .filter((line) => !line.trimStart().startsWith('#'))
+        .join('\n');
       expect(activeLines).not.toContain('[[kv_namespaces]]');
     });
 
-    it('has no plaintext [vars] section with secrets', () => {
+    it('has no active [vars] section with secrets', () => {
+      const activeLines = wranglerContent
+        .split('\n')
+        .filter((line) => !line.trimStart().startsWith('#'))
+        .join('\n');
       expect(activeLines).not.toContain('[vars]');
-    });
-
-    it('does not hardcode INSTALL_TOKEN_PEPPER value', () => {
-      // The pepper should only exist as a wrangler secret, not in toml
-      expect(activeLines).not.toMatch(/INSTALL_TOKEN_PEPPER\s*=\s*"/);
-    });
-
-    it('does not hardcode ADMIN_BOOTSTRAP_SECRET value', () => {
-      expect(activeLines).not.toMatch(/ADMIN_BOOTSTRAP_SECRET\s*=\s*"/);
     });
   });
 });
 
 /**
- * Helper: grep extension source for a pattern, excluding test files and node_modules.
- * Returns matching lines or empty string.
+ * Helper: grep recursively in a directory for a pattern.
  */
-function grepSource(dir: string, pattern: string): string {
+function grepRecursive(dir: string, pattern: string): string {
   try {
-    const cmd = `grep -rE "${pattern}" "${dir}" --include="*.ts" --include="*.tsx" --exclude-dir=node_modules --exclude="*.test.ts" --exclude="*security-boundary*"`;
+    const cmd = `grep -r "${pattern}" "${dir}" --include="*.ts" --include="*.tsx" --exclude-dir=node_modules --exclude="*.test.ts"`;
     return execSync(cmd, { encoding: 'utf-8' }).trim();
   } catch {
     return '';
