@@ -2,8 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join, resolve } from 'path';
 
-const EXTENSION_ROOT = resolve(__dirname, '..');
-const REPO_ROOT = resolve(EXTENSION_ROOT, '..');
+const ROOT = resolve(__dirname, '../..');
 
 describe('Security boundary verification', () => {
   describe('manifest.json', () => {
@@ -31,12 +30,8 @@ describe('Security boundary verification', () => {
       expect(manifest.permissions).toEqual(['storage']);
     });
 
-    it('has only approved host permissions', () => {
-      expect(manifest.host_permissions).toEqual([
-        'https://*.workers.dev/*',
-        'http://localhost/*',
-        'http://127.0.0.1/*',
-      ]);
+    it('has only approved Worker host permission', () => {
+      expect(manifest.host_permissions).toEqual(['https://*.workers.dev/*']);
     });
   });
 

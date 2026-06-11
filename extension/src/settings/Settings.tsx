@@ -240,7 +240,7 @@ export function Settings() {
             disabled={!isUrlValid || isTesting}
             className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed rounded-md transition-colors"
           >
-            {isTesting ? 'Testing…' : 'Save & Test'}
+            {isTesting ? 'Testing...' : 'Save & Test'}
           </button>
           <button
             onClick={handleResetDefault}
@@ -257,7 +257,7 @@ export function Settings() {
         )}
 
         {saved && !saveError && connectionState?.status === 'connected' && (
-          <p className="text-xs text-green-600">✓ URL saved and connection verified.</p>
+          <p className="text-xs text-green-600">URL saved and connection verified.</p>
         )}
       </section>
 
@@ -287,7 +287,7 @@ export function Settings() {
                   {credentialStatus === 'verified' && 'Authenticated'}
                   {credentialStatus === 'revoked' && 'Revoked'}
                   {credentialStatus === 'invalid' && 'Invalid'}
-                  {credentialStatus === 'testing' && 'Testing…'}
+                  {credentialStatus === 'testing' && 'Testing...'}
                   {credentialStatus === 'saved' && 'Saved (not yet tested)'}
                   {credentialStatus === 'idle' && 'Ready'}
                   {credentialStatus === 'error' && 'Error'}
@@ -305,7 +305,7 @@ export function Settings() {
                 disabled={credentialStatus === 'testing'}
                 className="px-3 py-1.5 text-xs font-medium text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed rounded-md transition-colors"
               >
-                {credentialStatus === 'testing' ? 'Testing…' : 'Test Authentication'}
+                {credentialStatus === 'testing' ? 'Testing...' : 'Test Authentication'}
               </button>
 
               {!showClearConfirm ? (

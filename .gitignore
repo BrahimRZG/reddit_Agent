@@ -1,2 +1,8 @@
+
+# local dependencies and builds
 node_modules/
 dist/
+extension/node_modules/
+extension/dist/
+worker-api/node_modules/
+worker-api/dist/
