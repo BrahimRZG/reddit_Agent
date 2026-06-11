@@ -11,6 +11,17 @@ export interface Env {
   ADMIN_BOOTSTRAP_SECRET: string;
 }
 
+/** Hono context variables set by middleware */
+export interface AppVariables {
+  installId: string;
+}
+
+/** Hono app environment */
+export type AppEnv = {
+  Bindings: Env;
+  Variables: AppVariables;
+};
+
 // --- Status Response (Spec 01, unchanged) ---
 
 /** Response from GET /v1/status */
@@ -70,11 +81,9 @@ export interface InstallTokenRow {
 
 /** Known error codes returned by the Worker API */
 export type ErrorCode =
-  // Spec 01 (unchanged)
   | 'NOT_FOUND'
   | 'METHOD_NOT_ALLOWED'
   | 'INTERNAL_ERROR'
-  // Spec 02: Auth errors
   | 'MISSING_AUTH_HEADERS'
   | 'INSTALL_NOT_FOUND'
   | 'TOKEN_REVOKED'

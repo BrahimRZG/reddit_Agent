@@ -3,7 +3,9 @@
   "name": "Reddit Marketing Agent",
   "version": "1.0.0",
   "description": "Internal Reddit research and drafting assistant for CouponsRiver operators.",
-  "permissions": ["storage"],
+  "permissions": [
+    "storage"
+  ],
   "host_permissions": [
     "https://*.workers.dev/*",
     "http://localhost/*",

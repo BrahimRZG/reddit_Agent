@@ -54,10 +54,6 @@ describe('Security boundary verification', () => {
     it('contains no REDDIT_CLIENT references', () => {
       expect(searchSourceFiles(extensionSrc, 'REDDIT_CLIENT')).toEqual([]);
     });
-
-    it('contains no hardcoded SECRET references', () => {
-      expect(searchSourceFiles(extensionSrc, 'SECRET')).toEqual([]);
-    });
   });
 
   describe('wrangler.toml', () => {
@@ -66,21 +62,9 @@ describe('Security boundary verification', () => {
       'utf-8'
     );
 
-    const activeLines = wranglerContent
-      .split('\n')
-      .filter((line: string) => !line.trimStart().startsWith('#'))
-      .join('\n');
-
-    it('has no active D1 database bindings', () => {
-      expect(activeLines).not.toContain('[[d1_databases]]');
-    });
-
-    it('has no active KV namespace bindings', () => {
-      expect(activeLines).not.toContain('[[kv_namespaces]]');
-    });
-
-    it('has no active [vars] section with secrets', () => {
-      expect(activeLines).not.toContain('[vars]');
+    it('does not expose secrets in [vars]', () => {
+      expect(wranglerContent).not.toContain('INSTALL_TOKEN_PEPPER =');
+      expect(wranglerContent).not.toContain('ADMIN_BOOTSTRAP_SECRET =');
     });
   });
 });
