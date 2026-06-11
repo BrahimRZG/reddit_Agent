@@ -10,7 +10,7 @@
     "lint": "eslint src/ --ext .ts,.tsx",
     "test": "vitest --run",
     "test:watch": "vitest",
-    "copy-static": "cp manifest.json dist/manifest.json && mkdir -p dist/icons dist/popup dist/settings && cp -r public/icons/* dist/icons/ && cp dist/src/popup/index.html dist/popup/index.html && cp dist/src/settings/index.html dist/settings/index.html"
+    "copy-static": "cp manifest.json dist/manifest.json && mkdir -p dist/icons && cp -r public/icons/* dist/icons/"
   },
   "dependencies": {
     "react": "^18.3.0",
