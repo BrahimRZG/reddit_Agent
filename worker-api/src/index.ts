@@ -3,6 +3,22 @@ import { statusRoute } from './routes/status';
 
 const app = new Hono();
 
+app.use('*', async (c, next) => {
+  await next();
+
+  c.header('Access-Control-Allow-Origin', '*');
+  c.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  c.header('Access-Control-Allow-Headers', 'Content-Type, Accept');
+});
+
+app.options('*', (c) => {
+  c.header('Access-Control-Allow-Origin', '*');
+  c.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  c.header('Access-Control-Allow-Headers', 'Content-Type, Accept');
+
+  return c.body(null, 204);
+});
+
 // Mount versioned routes
 app.route('/v1', statusRoute);
 
@@ -24,6 +40,7 @@ app.notFound((c) => {
 // Global error handler
 app.onError((err, c) => {
   console.error('[Worker API] Unhandled error:', err.message);
+
   return c.json(
     {
       error: {
