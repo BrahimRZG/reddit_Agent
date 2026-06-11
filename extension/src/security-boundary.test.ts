@@ -1,14 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
-import { execSync } from 'child_process';
+import { readFileSync, readdirSync, statSync } from 'fs';
+import { join, resolve } from 'path';
 
-const ROOT = resolve(__dirname, '../../..');
+const EXTENSION_ROOT = resolve(__dirname, '..');
+const REPO_ROOT = resolve(EXTENSION_ROOT, '..');
 
 describe('Security boundary verification', () => {
   describe('manifest.json', () => {
     const manifest = JSON.parse(
-      readFileSync(resolve(ROOT, 'extension/manifest.json'), 'utf-8')
+      readFileSync(resolve(EXTENSION_ROOT, 'manifest.json'), 'utf-8')
     );
 
     it('has no content_scripts', () => {
@@ -31,67 +31,90 @@ describe('Security boundary verification', () => {
       expect(manifest.permissions).toEqual(['storage']);
     });
 
-    it('has only workers.dev host permission', () => {
-      expect(manifest.host_permissions).toEqual(['https://*.workers.dev/*']);
+    it('has only approved host permissions', () => {
+      expect(manifest.host_permissions).toEqual([
+        'https://*.workers.dev/*',
+        'http://localhost/*',
+        'http://127.0.0.1/*',
+      ]);
     });
   });
 
   describe('Extension source code', () => {
-    const extensionSrc = resolve(ROOT, 'extension/src');
+    const extensionSrc = resolve(EXTENSION_ROOT, 'src');
 
     it('contains no API_KEY references', () => {
-      const result = grepRecursive(extensionSrc, 'API_KEY');
-      expect(result).toBe('');
+      expect(searchSourceFiles(extensionSrc, 'API_KEY')).toEqual([]);
     });
 
     it('contains no OPENAI references', () => {
-      const result = grepRecursive(extensionSrc, 'OPENAI');
-      expect(result).toBe('');
+      expect(searchSourceFiles(extensionSrc, 'OPENAI')).toEqual([]);
     });
 
     it('contains no REDDIT_CLIENT references', () => {
-      const result = grepRecursive(extensionSrc, 'REDDIT_CLIENT');
-      expect(result).toBe('');
+      expect(searchSourceFiles(extensionSrc, 'REDDIT_CLIENT')).toEqual([]);
     });
 
-    it('contains no hardcoded SECRET values', () => {
-      const result = grepRecursive(extensionSrc, 'SECRET');
-      expect(result).toBe('');
+    it('contains no hardcoded SECRET references', () => {
+      expect(searchSourceFiles(extensionSrc, 'SECRET')).toEqual([]);
     });
   });
 
   describe('wrangler.toml', () => {
     const wranglerContent = readFileSync(
-      resolve(ROOT, 'worker-api/wrangler.toml'),
+      resolve(REPO_ROOT, 'worker-api/wrangler.toml'),
       'utf-8'
     );
 
+    const activeLines = wranglerContent
+      .split('\n')
+      .filter((line: string) => !line.trimStart().startsWith('#'))
+      .join('\n');
+
+    it('has no active D1 database bindings', () => {
+      expect(activeLines).not.toContain('[[d1_databases]]');
+    });
+
     it('has no active KV namespace bindings', () => {
-      const activeLines = wranglerContent
-        .split('\n')
-        .filter((line) => !line.trimStart().startsWith('#'))
-        .join('\n');
       expect(activeLines).not.toContain('[[kv_namespaces]]');
     });
 
     it('has no active [vars] section with secrets', () => {
-      const activeLines = wranglerContent
-        .split('\n')
-        .filter((line) => !line.trimStart().startsWith('#'))
-        .join('\n');
       expect(activeLines).not.toContain('[vars]');
     });
   });
 });
 
-/**
- * Helper: grep recursively in a directory for a pattern.
- */
-function grepRecursive(dir: string, pattern: string): string {
-  try {
-    const cmd = `grep -r "${pattern}" "${dir}" --include="*.ts" --include="*.tsx" --exclude-dir=node_modules --exclude="*.test.ts"`;
-    return execSync(cmd, { encoding: 'utf-8' }).trim();
-  } catch {
-    return '';
+function searchSourceFiles(dir: string, pattern: string): string[] {
+  const matches: string[] = [];
+
+  for (const entry of readdirSync(dir)) {
+    const fullPath = join(dir, entry);
+    const stat = statSync(fullPath);
+
+    if (stat.isDirectory()) {
+      if (entry === 'node_modules' || entry === 'dist') {
+        continue;
+      }
+
+      matches.push(...searchSourceFiles(fullPath, pattern));
+      continue;
+    }
+
+    if (!entry.endsWith('.ts') && !entry.endsWith('.tsx')) {
+      continue;
+    }
+
+    if (entry.endsWith('.test.ts') || entry.endsWith('.test.tsx')) {
+      continue;
+    }
+
+    const content = readFileSync(fullPath, 'utf-8');
+
+    if (content.includes(pattern)) {
+      matches.push(fullPath);
+    }
   }
+
+  return matches;
 }

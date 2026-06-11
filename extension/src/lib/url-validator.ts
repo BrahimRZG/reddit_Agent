@@ -33,9 +33,17 @@ export function validateWorkerApiUrl(input: string): ValidationResult {
   }
 
   // Check protocol
-  if (parsed.protocol !== 'https:') {
-    return { valid: false, error: 'URL must use HTTPS protocol.' };
-  }
+  const isHttps = parsed.protocol === 'https:';
+const isLocalHttp =
+  parsed.protocol === 'http:' &&
+  (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1');
+
+if (!isHttps && !isLocalHttp) {
+  return {
+    valid: false,
+    error: 'URL must use HTTPS protocol, except localhost for development.',
+  };
+}
 
   // Normalize: remove trailing slash
   let normalizedUrl = input;
