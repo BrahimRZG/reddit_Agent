@@ -5,10 +5,10 @@
   "description": "Internal Reddit research and drafting assistant for CouponsRiver operators.",
   "permissions": ["storage"],
   "host_permissions": [
-  "https://*.workers.dev/*",
-  "http://localhost/*",
-  "http://127.0.0.1/*"
-],
+    "https://*.workers.dev/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
   "options_page": "settings/index.html",
   "action": {
     "default_popup": "popup/index.html",

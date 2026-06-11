@@ -7,47 +7,47 @@ const MAX_URL_LENGTH = 2048;
  *
  * Rules:
  * 1. Must be parseable as a URL by `new URL()`
- * 2. Must use `https:` protocol
+ * 2. Must use `https:` protocol, except localhost for development testing
  * 3. Must not exceed 2048 characters
  * 4. On success, normalizedUrl has trailing slash removed
- *
- * @param input - The URL string to validate
- * @returns A discriminated union: success with normalizedUrl, or failure with error message
  */
 export function validateWorkerApiUrl(input: string): ValidationResult {
-  // Check length first (cheap check before URL parsing)
-  if (input.length === 0) {
+  const trimmedInput = input.trim();
+
+  if (trimmedInput.length === 0) {
     return { valid: false, error: 'URL must not be empty.' };
   }
 
-  if (input.length > MAX_URL_LENGTH) {
-    return { valid: false, error: `URL must not exceed ${MAX_URL_LENGTH} characters.` };
+  if (trimmedInput.length > MAX_URL_LENGTH) {
+    return {
+      valid: false,
+      error: `URL must not exceed ${MAX_URL_LENGTH} characters.`,
+    };
   }
 
-  // Attempt to parse as a URL
   let parsed: URL;
+
   try {
-    parsed = new URL(input);
+    parsed = new URL(trimmedInput);
   } catch {
     return { valid: false, error: 'URL is not well-formed.' };
   }
 
-  // Check protocol
   const isHttps = parsed.protocol === 'https:';
-const isLocalHttp =
-  parsed.protocol === 'http:' &&
-  (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1');
+  const isLocalHttp =
+    parsed.protocol === 'http:' &&
+    (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1');
 
-if (!isHttps && !isLocalHttp) {
-  return {
-    valid: false,
-    error: 'URL must use HTTPS protocol, except localhost for development.',
-  };
-}
+  if (!isHttps && !isLocalHttp) {
+    return {
+      valid: false,
+      error: 'URL must use HTTPS protocol, except localhost for development.',
+    };
+  }
 
-  // Normalize: remove trailing slash
-  let normalizedUrl = input;
-  if (normalizedUrl.endsWith('/')) {
+  let normalizedUrl = trimmedInput;
+
+  while (normalizedUrl.endsWith('/')) {
     normalizedUrl = normalizedUrl.slice(0, -1);
   }
 

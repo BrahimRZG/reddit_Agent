@@ -9,8 +9,8 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        popup: resolve(__dirname, 'src/popup/index.html'),
-        settings: resolve(__dirname, 'src/settings/index.html'),
+        popup: resolve(__dirname, 'popup/index.html'),
+        settings: resolve(__dirname, 'settings/index.html'),
         'service-worker': resolve(__dirname, 'src/service-worker/index.ts'),
       },
       output: {
