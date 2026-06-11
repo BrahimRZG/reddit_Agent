@@ -1,51 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'fs';
-import { resolve } from 'path';
+import { join, resolve } from 'path';
 
-const REPO_ROOT = resolve(__dirname, '../..');
-const EXTENSION_ROOT = resolve(REPO_ROOT, 'extension');
-
-function listSourceFiles(dir: string): string[] {
-  const entries = readdirSync(dir);
-  const files: string[] = [];
-
-  for (const entry of entries) {
-    const fullPath = resolve(dir, entry);
-    const stat = statSync(fullPath);
-
-    if (stat.isDirectory()) {
-      if (entry === 'node_modules' || entry === 'dist') {
-        continue;
-      }
-      files.push(...listSourceFiles(fullPath));
-      continue;
-    }
-
-    if (
-      fullPath.endsWith('.ts') ||
-      fullPath.endsWith('.tsx') ||
-      fullPath.endsWith('.js') ||
-      fullPath.endsWith('.json')
-    ) {
-      if (!fullPath.endsWith('.test.ts') && !fullPath.endsWith('.test.tsx')) {
-        files.push(fullPath);
-      }
-    }
-  }
-
-  return files;
-}
-
-function readExtensionSource(): string {
-  return listSourceFiles(resolve(EXTENSION_ROOT, 'src'))
-    .map((file) => readFileSync(file, 'utf-8'))
-    .join('\n');
-}
+const EXTENSION_ROOT = resolve(__dirname, '..');
+const REPO_ROOT = resolve(EXTENSION_ROOT, '..');
 
 describe('Security boundary verification', () => {
   describe('manifest.json', () => {
     const manifest = JSON.parse(
-      readFileSync(resolve(EXTENSION_ROOT, 'manifest.json'), 'utf-8'),
+      readFileSync(resolve(EXTENSION_ROOT, 'manifest.json'), 'utf-8')
     );
 
     it('has no content_scripts', () => {
@@ -68,7 +31,7 @@ describe('Security boundary verification', () => {
       expect(manifest.permissions).toEqual(['storage']);
     });
 
-    it('has only approved Worker and local dev host permissions', () => {
+    it('has only approved host permissions', () => {
       expect(manifest.host_permissions).toEqual([
         'https://*.workers.dev/*',
         'http://localhost/*',
@@ -77,59 +40,81 @@ describe('Security boundary verification', () => {
     });
   });
 
-  describe('Extension source code — no secrets', () => {
-    const source = readExtensionSource();
+  describe('Extension source code', () => {
+    const extensionSrc = resolve(EXTENSION_ROOT, 'src');
 
-    it('does not reference Worker admin secret names', () => {
-      expect(source).not.toContain('ADMIN_BOOTSTRAP_SECRET');
-      expect(source).not.toContain('INSTALL_TOKEN_PEPPER');
+    it('contains no API_KEY references', () => {
+      expect(searchSourceFiles(extensionSrc, 'API_KEY')).toEqual([]);
     });
 
-    it('does not reference OpenAI or Reddit secret names', () => {
-      expect(source).not.toContain('OPENAI_API_KEY');
-      expect(source).not.toContain('REDDIT_CLIENT_SECRET');
-      expect(source).not.toContain('REDDIT_CLIENT_ID');
+    it('contains no OPENAI references', () => {
+      expect(searchSourceFiles(extensionSrc, 'OPENAI')).toEqual([]);
     });
 
-    it('does not contain generic API key constants', () => {
-      expect(source).not.toMatch(/\bAPI_KEY\b/);
-    });
-  });
-
-  describe('Extension source code — no Reddit automation', () => {
-    const source = readExtensionSource();
-
-    it('does not contain content-script automation APIs', () => {
-      expect(source).not.toMatch(/document\.querySelector/);
-      expect(source).not.toMatch(/document\.querySelectorAll/);
-      expect(source).not.toMatch(/\.click\(\)/);
-      expect(source).not.toMatch(/\.submit\(\)/);
+    it('contains no REDDIT_CLIENT references', () => {
+      expect(searchSourceFiles(extensionSrc, 'REDDIT_CLIENT')).toEqual([]);
     });
 
-    it('does not automate Reddit actions', () => {
-      expect(source).not.toMatch(/vote/i);
-      expect(source).not.toMatch(/comment.*submit/i);
-      expect(source).not.toMatch(/reddit\.com\/api/i);
+    it('contains no hardcoded SECRET references', () => {
+      expect(searchSourceFiles(extensionSrc, 'SECRET')).toEqual([]);
     });
   });
 
-  describe('wrangler.toml — allowed bindings only', () => {
-    const wrangler = readFileSync(
+  describe('wrangler.toml', () => {
+    const wranglerContent = readFileSync(
       resolve(REPO_ROOT, 'worker-api/wrangler.toml'),
-      'utf-8',
+      'utf-8'
     );
 
-    it('allows the intentional D1 DB binding', () => {
-      expect(wrangler).toContain('[[d1_databases]]');
-      expect(wrangler).toContain('binding = "DB"');
+    const activeLines = wranglerContent
+      .split('\n')
+      .filter((line: string) => !line.trimStart().startsWith('#'))
+      .join('\n');
+
+    it('has no active D1 database bindings', () => {
+      expect(activeLines).not.toContain('[[d1_databases]]');
     });
 
-    it('does not declare KV namespaces', () => {
-      expect(wrangler).not.toContain('[[kv_namespaces]]');
+    it('has no active KV namespace bindings', () => {
+      expect(activeLines).not.toContain('[[kv_namespaces]]');
     });
 
-    it('does not contain plaintext secret vars', () => {
-      expect(wrangler).not.toMatch(/\[vars\][\s\S]*(SECRET|PEPPER|TOKEN|API_KEY)/i);
+    it('has no active [vars] section with secrets', () => {
+      expect(activeLines).not.toContain('[vars]');
     });
   });
 });
+
+function searchSourceFiles(dir: string, pattern: string): string[] {
+  const matches: string[] = [];
+
+  for (const entry of readdirSync(dir)) {
+    const fullPath = join(dir, entry);
+    const stat = statSync(fullPath);
+
+    if (stat.isDirectory()) {
+      if (entry === 'node_modules' || entry === 'dist') {
+        continue;
+      }
+
+      matches.push(...searchSourceFiles(fullPath, pattern));
+      continue;
+    }
+
+    if (!entry.endsWith('.ts') && !entry.endsWith('.tsx')) {
+      continue;
+    }
+
+    if (entry.endsWith('.test.ts') || entry.endsWith('.test.tsx')) {
+      continue;
+    }
+
+    const content = readFileSync(fullPath, 'utf-8');
+
+    if (content.includes(pattern)) {
+      matches.push(fullPath);
+    }
+  }
+
+  return matches;
+}

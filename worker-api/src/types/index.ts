@@ -10,10 +10,7 @@ export interface Env {
   INSTALL_TOKEN_PEPPER: string;
   ADMIN_BOOTSTRAP_SECRET: string;
 }
-/** Hono context variables set by middleware */
-export interface Variables {
-  installId: string;
-}
+
 // --- Status Response (Spec 01, unchanged) ---
 
 /** Response from GET /v1/status */

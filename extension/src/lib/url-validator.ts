@@ -7,7 +7,7 @@ const MAX_URL_LENGTH = 2048;
  *
  * Rules:
  * 1. Must be parseable as a URL by `new URL()`
- * 2. Must use `https:` protocol, except local HTTP for development testing
+ * 2. Must use `https:` protocol, except localhost for development testing
  * 3. Must not exceed 2048 characters
  * 4. On success, normalizedUrl has trailing slash removed
  */
