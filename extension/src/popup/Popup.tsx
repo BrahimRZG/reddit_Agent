@@ -4,6 +4,7 @@ import { getWorkerApiBaseUrl } from '../lib/storage';
 import { checkStatus } from '../lib/api-client';
 import { satisfiesMinimum } from '../lib/semver';
 import { ConnectionBadge } from '../components/ConnectionBadge';
+import { OnboardingGate } from '../components/OnboardingGate';
 
 /** Current extension version — read from manifest at build time */
 const EXTENSION_VERSION = '1.0.0';
@@ -78,7 +79,9 @@ export function Popup() {
 
   return (
     <div className="w-80 p-4 bg-white">
-      {/* Header */}
+      {/* Header — always rendered (outside the gate) so the Operator can reach
+          Settings even while Compliance_Onboarding is incomplete (Req 5.4 path
+          to the ungated Save & Test lives in Settings). */}
       <div className="flex items-center justify-between mb-3">
         <h1 className="text-sm font-semibold text-gray-900">
           Reddit Marketing Agent
@@ -104,33 +107,39 @@ export function Popup() {
         </button>
       </div>
 
-      {/* Connection Status */}
-      <div className="py-2">
-        <ConnectionBadge state={state} />
-      </div>
+      {/* The popup body is gated: while onboarding is incomplete the surface
+          shows the Onboarding_Screen (Req 2.1). The public status check itself
+          stays ungated (Property 6) and Settings keeps the always-available
+          public Save & Test path (Req 5.4). */}
+      <OnboardingGate>
+        {/* Connection Status */}
+        <div className="py-2">
+          <ConnectionBadge state={state} />
+        </div>
 
-      {/* Retry button for error states */}
-      {(state.status === 'offline' || state.status === 'server-error') && (
-        <button
-          onClick={handleRetry}
-          className="mt-3 w-full px-3 py-1.5 text-xs font-medium text-white bg-gray-700 hover:bg-gray-800 rounded transition-colors"
-        >
-          Retry
-        </button>
-      )}
+        {/* Retry button for error states */}
+        {(state.status === 'offline' || state.status === 'server-error') && (
+          <button
+            onClick={handleRetry}
+            className="mt-3 w-full px-3 py-1.5 text-xs font-medium text-white bg-gray-700 hover:bg-gray-800 rounded transition-colors"
+          >
+            Retry
+          </button>
+        )}
 
-      {/* Not configured prompt */}
-      {state.status === 'not-configured' && (
-        <button
-          onClick={handleOpenSettings}
-          className="mt-3 w-full px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors"
-        >
-          Configure Connection
-        </button>
-      )}
+        {/* Not configured prompt */}
+        {state.status === 'not-configured' && (
+          <button
+            onClick={handleOpenSettings}
+            className="mt-3 w-full px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors"
+          >
+            Configure Connection
+          </button>
+        )}
 
-      {/* Version info */}
-      <p className="mt-3 text-[10px] text-gray-400">v{EXTENSION_VERSION}</p>
+        {/* Version info */}
+        <p className="mt-3 text-[10px] text-gray-400">v{EXTENSION_VERSION}</p>
+      </OnboardingGate>
     </div>
   );
 }

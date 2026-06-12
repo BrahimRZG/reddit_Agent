@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
-import type { Env } from '../types';
+import type { AppEnv } from '../types';
 
-const authRoute = new Hono<{ Bindings: Env }>();
+const authRoute = new Hono<AppEnv>();
 
 authRoute.post('/verify', (c) => {
   const installId = c.get('installId');
