@@ -37,11 +37,21 @@ export interface StatusResponse {
 
 // --- Error Response ---
 
-/** Standard error response shape for all Worker API errors */
+/**
+ * Standard error response shape for all Worker API errors.
+ *
+ * Spec 04 additively introduces the OPTIONAL `error_id` and `timestamp` fields
+ * (safe, non-sensitive debug metadata). They are optional, so every existing
+ * Spec 01/02/03 error body remains a valid `ErrorResponse`.
+ */
 export interface ErrorResponse {
   error: {
     code: ErrorCode;
     message: string;
+    /** Optional opaque correlation id (Spec 04); NOT derived from any secret. */
+    error_id?: string;
+    /** Optional ISO 8601 timestamp (Spec 04). */
+    timestamp?: string;
     retry_after_seconds?: number;
   };
 }
@@ -91,4 +101,70 @@ export type ErrorCode =
   | 'TIMESTAMP_EXPIRED'
   | 'NONCE_REUSED'
   | 'RATE_LIMITED'
-  | 'UNAUTHORIZED';
+  | 'UNAUTHORIZED'
+  | 'VALIDATION_ERROR'; // NEW (Spec 04); no existing code removed or repurposed
+
+
+// --- Compare Types (Spec 04: CouponsRiver Compare API Foundation) ---
+
+/** The subject of a comparison supplied by the caller (Requirement 9.2). */
+export interface Candidate {
+  /** Required merchant identifier. */
+  merchant: string;
+  /** Optional product name. */
+  product?: string;
+  /** Optional coupon code. */
+  coupon_code?: string;
+  /** Optional category. */
+  category?: string;
+}
+
+/**
+ * Request body for POST /v1/compare: Candidate fields plus an optional
+ * `max_results` integer option (Requirement 9.2).
+ */
+export interface CompareRequest extends Candidate {
+  /** Optional integer in 1..50 capping the number of returned matches. */
+  max_results?: number;
+}
+
+/**
+ * A Candidate after validation and normalization: all string fields are
+ * trimmed of surrounding whitespace (Requirement 2.7).
+ */
+export interface NormalizedCandidate {
+  merchant: string;
+  product?: string;
+  coupon_code?: string;
+  category?: string;
+}
+
+/**
+ * A fully validated and normalized compare request with an effective
+ * `max_results` value (the default is applied when the field is omitted).
+ */
+export interface NormalizedCompareRequest {
+  candidate: NormalizedCandidate;
+  /** Effective value (default applied when omitted). */
+  max_results: number;
+}
+
+/** A single coupon/offer match returned from the data source (Requirement 9.4). */
+export interface Match {
+  merchant: string;
+  coupon_code?: string;
+  description: string;
+  /** Numeric relevance score. */
+  score: number;
+  /** Identifies the originating adapter (e.g. 'mock-couponsriver'). */
+  source: string;
+}
+
+/** Success body for POST /v1/compare (Requirement 9.3). */
+export interface CompareResponse {
+  /** Normalized echo of the queried candidate. */
+  candidate: NormalizedCandidate;
+  /** Invariant: equals matches.length. */
+  match_count: number;
+  matches: Match[];
+}
