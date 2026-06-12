@@ -156,8 +156,15 @@ export async function authenticatedFetch(
 export async function verifyAuth(
   baseUrl: string
 ): Promise<
-  | { success: true; installId: string }
-  | { success: false; error: string }
+  | { success: true; data: any }
+  | {
+      success: false;
+      error: {
+        type: 'credentials' | 'server' | 'network';
+        message: string;
+        status?: number;
+      };
+    }
 > {
   try {
     const res = await authenticatedFetch(baseUrl, '/v1/auth/verify', {
@@ -169,22 +176,37 @@ export async function verifyAuth(
     if (!res.ok) {
       return {
         success: false,
-        error: body?.error?.message ?? 'Authentication failed',
+        error: {
+          type: 'server',
+          status: res.status,
+          message: body?.error?.message ?? 'Authentication failed',
+        },
       };
     }
 
     return {
       success: true,
-      installId: body.install_id,
+      data: body,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Authentication failed';
 
+    if (message.includes('No credentials configured')) {
+      return {
+        success: false,
+        error: {
+          type: 'credentials',
+          message: 'No credentials configured',
+        },
+      };
+    }
+
     return {
       success: false,
-      error: message.includes('No credentials configured')
-        ? 'No credentials configured'
-        : 'Authentication failed',
+      error: {
+        type: 'network',
+        message: 'Authentication failed',
+      },
     };
   }
 }
