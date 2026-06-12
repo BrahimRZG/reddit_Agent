@@ -17,12 +17,12 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240529.0",
-    "typescript": "^5.4.0",
-    "wrangler": "^3.60.0",
-    "eslint": "^8.57.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.57.0",
+    "fast-check": "^3.23.2",
+    "typescript": "^5.4.0",
     "vitest": "^1.6.0",
-    "fast-check": "3.23.2"
+    "wrangler": "^3.60.0"
   }
 }
