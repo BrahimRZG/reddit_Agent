@@ -1,0 +1,37 @@
+{
+  "pbtResults": {
+    "2.5 Write property test for acknowledgement completeness in `onboarding.test.ts`": {
+      "status": "passed",
+      "lastRunTimestamp": 1781274320019
+    },
+    "2.6 Write property test for version re-acknowledgement in `onboarding.test.ts`": {
+      "status": "passed",
+      "lastRunTimestamp": 1781274321038
+    },
+    "2.7 Write property test for timestamp & version presence in `onboarding.test.ts`": {
+      "status": "passed",
+      "lastRunTimestamp": 1781274322055
+    },
+    "3.4 Write property test for record round-trip in `onboarding-storage.test.ts`": {
+      "status": "passed",
+      "lastRunTimestamp": 1781274323055
+    },
+    "3.5 Write property test for local-only persistence in `onboarding-storage.test.ts`": {
+      "status": "passed",
+      "lastRunTimestamp": 1781274325012
+    },
+    "4.3 Write property test for gate soundness in `onboarding-gate.test.ts`": {
+      "status": "passed",
+      "lastRunTimestamp": 1781274326010
+    },
+    "4.4 Write property test for fail-closed gating in `onboarding-gate.test.ts`": {
+      "status": "passed",
+      "lastRunTimestamp": 1781274327774
+    },
+    "4.5 Write property test for public status availability in `onboarding-gate.test.ts`": {
+      "status": "passed",
+      "lastRunTimestamp": 1781274328092
+    }
+  },
+  "executionHistory": {}
+}
