@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { AppEnv } from '../types';
 import type { Env } from '../types';
 
 const authRoute = new Hono<{ Bindings: Env }>();

@@ -118,3 +118,73 @@ function isValidStatusResponse(data: unknown): data is StatusResponse {
     typeof obj.promotional_modes_enabled === 'boolean'
   );
 }
+
+import { getCredentials } from './credential-storage';
+
+export async function authenticatedFetch(
+  baseUrl: string,
+  path: string,
+  init: RequestInit = {}
+): Promise<Response> {
+  const credentials = await getCredentials();
+
+  if (!credentials) {
+    throw new Error('No credentials configured');
+  }
+
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${credentials.installToken}`,
+    'X-Install-Id': credentials.installId,
+    'X-Timestamp': new Date().toISOString(),
+    'X-Nonce': crypto.randomUUID(),
+    ...(init.headers as Record<string, string> | undefined),
+  };
+
+  if (init.body !== undefined) {
+    headers['Content-Type'] = headers['Content-Type'] ?? 'application/json';
+  }
+
+  const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+
+  return fetch(`${normalizedBaseUrl}${normalizedPath}`, {
+    ...init,
+    headers,
+  });
+}
+
+export async function verifyAuth(
+  baseUrl: string
+): Promise<
+  | { success: true; installId: string }
+  | { success: false; error: string }
+> {
+  try {
+    const res = await authenticatedFetch(baseUrl, '/v1/auth/verify', {
+      method: 'POST',
+    });
+
+    const body = (await res.json()) as any;
+
+    if (!res.ok) {
+      return {
+        success: false,
+        error: body?.error?.message ?? 'Authentication failed',
+      };
+    }
+
+    return {
+      success: true,
+      installId: body.install_id,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Authentication failed';
+
+    return {
+      success: false,
+      error: message.includes('No credentials configured')
+        ? 'No credentials configured'
+        : 'Authentication failed',
+    };
+  }
+}
