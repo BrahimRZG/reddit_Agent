@@ -5,6 +5,7 @@ import { checkStatus } from '../lib/api-client';
 import { satisfiesMinimum } from '../lib/semver';
 import { ConnectionBadge } from '../components/ConnectionBadge';
 import { OnboardingGate } from '../components/OnboardingGate';
+import { IntentScanner } from '../components/IntentScanner';
 
 /** Current extension version — read from manifest at build time */
 const EXTENSION_VERSION = '1.0.0';
@@ -136,6 +137,11 @@ export function Popup() {
             Configure Connection
           </button>
         )}
+
+        {/* Intent Scanner — local, manual-input analysis (Spec 05). Rendered
+            inside the gate so it stays unavailable until Compliance_Onboarding
+            is complete. */}
+        <IntentScanner />
 
         {/* Version info */}
         <p className="mt-3 text-[10px] text-gray-400">v{EXTENSION_VERSION}</p>
