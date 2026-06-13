@@ -3,6 +3,7 @@ import type { ConnectionState } from '../types';
 import { getWorkerApiBaseUrl } from '../lib/storage';
 import { checkStatus } from '../lib/api-client';
 import { satisfiesMinimum } from '../lib/semver';
+import { ReviewQueue } from '../components/ReviewQueue';
 import { DraftCoPilot } from '../components/DraftCoPilot';
 import { ConnectionBadge } from '../components/ConnectionBadge';
 import { OnboardingGate } from '../components/OnboardingGate';
@@ -143,6 +144,12 @@ export function Popup() {
         <IntentScanner />
 
         <DraftCoPilot />
+        {/* Review Queue — local, Extension-UI-only triage of saved reply drafts
+            (Spec 07). Rendered inside the gate, below the Intent_Scanner and the
+            Draft_Co-Pilot, as a distinct section so it stays unmounted and runs no
+            queue read/write/mutation logic (including readQueue) until
+            Compliance_Onboarding is complete (Req 11.1–11.4). */}
+        <ReviewQueue />
 
         {/* Version info */}
         <p className="mt-3 text-[10px] text-gray-400">v{EXTENSION_VERSION}</p>
