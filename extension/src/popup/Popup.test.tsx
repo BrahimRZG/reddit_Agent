@@ -6,6 +6,22 @@ import { Popup } from './Popup';
 import { STORAGE_KEYS } from '../types';
 import { ACKNOWLEDGEMENT_VERSION, REQUIRED_ACKNOWLEDGEMENT_ITEM_IDS } from '../lib/onboarding';
 import type { AcknowledgementRecord } from '../types';
+import { generateDraft, validateDraftInput } from '../lib/draft-generator';
+
+// Spec 06, Task 6.15: wrap the REAL draft-generator functions as spies so we can
+// assert they are never invoked before the OnboardingGate completes (Req 11.2).
+// The spies delegate to the genuine implementations, so every other test in this
+// file behaves identically; vi.clearAllMocks() in beforeEach resets call counts
+// before each test, and the implementations are preserved (clearAllMocks does not
+// reset implementations).
+vi.mock('../lib/draft-generator', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/draft-generator')>();
+  return {
+    ...actual,
+    generateDraft: vi.fn(actual.generateDraft),
+    validateDraftInput: vi.fn(actual.validateDraftInput),
+  };
+});
 
 const ONBOARDING_KEY = STORAGE_KEYS.ONBOARDING;
 
@@ -93,3 +109,102 @@ describe('Popup — onboarding gate at the entry point (Req 2.1, 5.4)', () => {
     expect(screen.queryByRole('button', { name: /accept and continue/i })).toBeNull();
   });
 });
+
+describe('Popup — Draft Co-Pilot gate behavior (Spec 06, Req 11.2, 11.3, 11.4, 11.5)', () => {
+  // Feature: draft-co-pilot, Property 13: the Draft_Co_Pilot lives inside the
+  // OnboardingGate and does not mount/render/run any draft logic until
+  // Compliance_Onboarding is complete; completing it preserves Specs 01/05.
+
+  it('does not render DraftCoPilot when onboarding is incomplete (Req 11.2)', async () => {
+    // No onboarding record in `store` → incomplete (missing).
+    render(<Popup />);
+
+    // The Onboarding_Screen is shown instead of the gated app body.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /accept and continue/i })).toBeTruthy()
+    );
+
+    // The Draft_Co_Pilot panel (and therefore its input/preview/controls) is not mounted.
+    expect(screen.queryByTestId('draft-co-pilot')).toBeNull();
+    expect(screen.queryByTestId('draft-generate-button')).toBeNull();
+    expect(screen.queryByTestId('draft-preview')).toBeNull();
+  });
+
+  it('does not render DraftCoPilot in the read_error gate state (Req 11.2)', async () => {
+    // Drive OnboardingGate into its fail-closed read_error state by making the
+    // onboarding storage read throw. readAcknowledgement maps a thrown
+    // chrome.storage.local.get into { kind: 'read_error' }, which the gate
+    // resolves to incomplete/read_error and never renders children. The
+    // OnboardingGate's mount effect (child) runs before Popup's (parent), so the
+    // first storage read is the onboarding read.
+    mockGet.mockRejectedValueOnce(new Error('read failed'));
+
+    render(<Popup />);
+
+    // The recoverable read-error UI is shown (text + Retry), not the app body.
+    await waitFor(() =>
+      expect(screen.getByText(/couldn'?t read your onboarding status/i)).toBeTruthy()
+    );
+    expect(screen.getByRole('button', { name: /retry/i })).toBeTruthy();
+
+    // The Draft_Co_Pilot panel is not mounted in the read_error state.
+    expect(screen.queryByTestId('draft-co-pilot')).toBeNull();
+    expect(screen.queryByTestId('draft-generate-button')).toBeNull();
+    expect(screen.queryByTestId('draft-preview')).toBeNull();
+  });
+
+  it('renders DraftCoPilot when onboarding is complete, below the Intent Scanner (Req 11.3, 11.4, 11.5)', async () => {
+    store.set(ONBOARDING_KEY, completeRecord);
+
+    render(<Popup />);
+
+    // Normal app body renders once onboarding is complete.
+    await waitFor(() => expect(screen.getByText(/connected/i)).toBeTruthy());
+
+    // The Draft_Co_Pilot panel is mounted (Req 11.3).
+    const draftPanel = screen.getByTestId('draft-co-pilot');
+    expect(draftPanel).toBeTruthy();
+
+    // The Spec 05 Intent_Scanner gate behavior is unchanged — it still renders (Req 11.5).
+    const intentHeading = screen.getByText(/intent scanner/i);
+    expect(intentHeading).toBeTruthy();
+
+    // Intent_Scanner appears BEFORE the Draft_Co_Pilot in document order, as a
+    // distinct section below it (Req 11.4). DOCUMENT_POSITION_FOLLOWING means the
+    // draft panel follows the intent heading.
+    const position = intentHeading.compareDocumentPosition(draftPanel);
+    expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe('Popup — draft generation is not invoked before gate completion (Spec 06, Req 11.2)', () => {
+  // Feature: draft-co-pilot, Property 13: no draft generation logic runs before
+  // Compliance_Onboarding completion.
+
+  it('does not invoke generateDraft while onboarding is incomplete', async () => {
+    // No onboarding record → incomplete.
+    render(<Popup />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /accept and continue/i })).toBeTruthy()
+    );
+
+    // The panel never mounted, so no draft generation could have run.
+    expect(generateDraft).not.toHaveBeenCalled();
+    expect(validateDraftInput).not.toHaveBeenCalled();
+  });
+
+  it('does not invoke generateDraft in the read_error gate state', async () => {
+    mockGet.mockRejectedValueOnce(new Error('read failed'));
+
+    render(<Popup />);
+
+    await waitFor(() =>
+      expect(screen.getByText(/couldn'?t read your onboarding status/i)).toBeTruthy()
+    );
+
+    expect(generateDraft).not.toHaveBeenCalled();
+    expect(validateDraftInput).not.toHaveBeenCalled();
+  });
+});
+

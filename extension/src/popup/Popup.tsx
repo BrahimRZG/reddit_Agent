@@ -3,6 +3,7 @@ import type { ConnectionState } from '../types';
 import { getWorkerApiBaseUrl } from '../lib/storage';
 import { checkStatus } from '../lib/api-client';
 import { satisfiesMinimum } from '../lib/semver';
+import { DraftCoPilot } from '../components/DraftCoPilot';
 import { ConnectionBadge } from '../components/ConnectionBadge';
 import { OnboardingGate } from '../components/OnboardingGate';
 import { IntentScanner } from '../components/IntentScanner';
@@ -138,10 +139,10 @@ export function Popup() {
           </button>
         )}
 
-        {/* Intent Scanner — local, manual-input analysis (Spec 05). Rendered
-            inside the gate so it stays unavailable until Compliance_Onboarding
-            is complete. */}
+       {/* Intent Scanner */}
         <IntentScanner />
+
+        <DraftCoPilot />
 
         {/* Version info */}
         <p className="mt-3 text-[10px] text-gray-400">v{EXTENSION_VERSION}</p>
