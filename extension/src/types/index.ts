@@ -117,7 +117,8 @@ export type OnboardingState =
 /** Keys used in chrome.storage.local */
 export const STORAGE_KEYS = {
   WORKER_API_BASE_URL: 'rma_worker_api_base_url', // Spec 01 (unchanged)
-  ONBOARDING: 'rma_onboarding_acknowledgement', // Spec 03 (new)
+  ONBOARDING: 'rma_onboarding_acknowledgement', // Spec 03 (unchanged)
+  REVIEW_QUEUE: 'rma_review_queue', // Spec 07 (new)
 } as const;
 
 /** Default Worker API URL used when no custom URL is configured */
@@ -324,4 +325,85 @@ export const COMPLIANCE_WARNING_MESSAGES: Record<ComplianceWarningId, string> = 
     'Concealing language was detected — this draft is not ready to post.',
   unsafe_no_disclosure:
     'This promotional draft is missing the affiliation disclosure — it is not ready to post.',
+};
+
+// --- Review Queue Types (Spec 07) ---
+
+/** The three Operator-controlled triage states (Req 3.1). Default on save is `needs_review`. */
+export type ReviewStatus = 'needs_review' | 'approved_for_manual_use' | 'rejected';
+
+/** Origin of a saved draft (Req 1.3, 1.4). */
+export type DraftSource = 'draft_co_pilot' | 'manual';
+
+/** A single advisory review-checklist entry (Req 5). */
+export interface ChecklistItem {
+  id: string; // stable Checklist_Item_Id, unique within its Queue_Item (Req 5.2)
+  text: string; // ≤ MAX_CHECKLIST_TEXT chars (Req 8.3)
+  checked: boolean; // defaults to false on add (Req 5.2)
+}
+
+/** A single saved entry in the Review_Queue (Req 1, 2). */
+export interface QueueItem {
+  id: string; // stable Item_Id, unique within the queue (Req 2.1)
+  draftText: string; // ≤ MAX_QUEUE_DRAFT_TEXT chars (Req 8.1)
+  source: DraftSource; // 'draft_co_pilot' | 'manual' (Req 1.3, 1.4)
+  mode?: DraftMode; // captured Spec 06 Draft_Mode when from a Draft_Result (Req 1.2)
+  warnings?: ComplianceWarning[]; // captured Spec 06 warnings, verbatim (Req 1.2, 1.6, 1.8)
+  safety?: 'safe' | 'unsafe'; // captured Spec 06 Safety_Flag (Req 1.2, 1.6)
+  status: ReviewStatus; // Operator-controlled triage state (Req 3)
+  note?: string; // advisory free-text Note, ≤ MAX_NOTE chars (Req 4)
+  checklist: ChecklistItem[]; // advisory checklist, ≤ MAX_CHECKLIST_ITEMS (Req 5)
+  created_at: string; // ISO 8601, set at save, immutable (Req 2.2, 2.5)
+  updated_at: string; // ISO 8601, bumped on each Operator modification (Req 2.3, 2.4)
+}
+
+/** The Review_Queue is the ordered collection of Queue_Items (Req 6.1). */
+export type ReviewQueue = QueueItem[];
+
+/**
+ * Typed outcome of reading the Review_Queue from chrome.storage.local (Req 10.1).
+ * The failure `message` is a fixed, safe string — never a stack trace, file path,
+ * secret, environment value, or internal implementation detail (Req 10.5).
+ */
+export type QueueReadOutcome =
+  | { ok: true; items: QueueItem[] }
+  | { ok: false; error: 'read_error' | 'parse_error'; message: string };
+
+/** Result of a bounded field validation (Req 8). */
+export type QueueFieldValidation =
+  | { kind: 'valid' }
+  | { kind: 'empty' } // zero non-whitespace chars (Req 1.7, 7.5)
+  | { kind: 'too_long'; max: number }; // exceeds the applicable bound (Req 8.2, 8.4)
+
+/** Result of an add (Req 8.5, 8.6) that may be bound-rejected. */
+export type AddResult =
+  | { ok: true; queue: ReviewQueue }
+  | { ok: false; reason: 'queue_full'; max: number };
+
+/** Result of a single-target mutation that may be validation- or lookup-rejected. */
+export type MutateResult =
+  | { ok: true; queue: ReviewQueue }
+  | { ok: false; reason: 'empty' | 'too_long' | 'checklist_full' | 'not_found'; max?: number };
+
+/** Storage bounds (Req 8). Single-sourced so transforms, the UI, and tests share them. */
+export const MAX_QUEUE_DRAFT_TEXT = 10000; // draft text per Queue_Item (Req 8.1, 8.2)
+export const MAX_NOTE = 2000; // Note length (Req 8.3, 8.4)
+export const MAX_CHECKLIST_TEXT = 280; // Checklist_Item text length (Req 8.3, 8.4)
+export const MAX_CHECKLIST_ITEMS = 50; // checklist items per Queue_Item (Req 8.5, 8.6)
+export const MAX_QUEUE_ITEMS = 200; // total Queue_Items (Req 8.5, 8.6)
+
+/**
+ * Fixed, safe failure messages for QueueReadOutcome (Req 10.5). These are leak-free
+ * constants — never a stack trace, file path, secret, environment value, or internal
+ * implementation detail. Used by the storage adapter and surfaced by the UI.
+ */
+export const QUEUE_READ_ERROR_MESSAGE = "Couldn't read your review queue. Please try again.";
+export const QUEUE_PARSE_ERROR_MESSAGE =
+  "Your saved review queue couldn't be read and was left untouched.";
+
+/** Plain, non-spammy display labels for each Review_Status (used by the UI). */
+export const REVIEW_STATUS_LABELS: Record<ReviewStatus, string> = {
+  needs_review: 'Needs review',
+  approved_for_manual_use: 'Approved for manual use',
+  rejected: 'Rejected',
 };

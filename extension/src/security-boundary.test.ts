@@ -375,3 +375,194 @@ describe('Spec 06 — Draft Co-Pilot manual-input-only scope exclusion (Properti
     }
   });
 });
+
+
+// --- Spec 07: Review Queue scope & permission containment ---
+
+/**
+ * Spec 07 source files (local, Extension-UI-only, Operator-triaged Review_Queue):
+ * the shared types module, the pure queue-transform module, the thin storage
+ * adapter, the React panel, and the popup wiring. The queue path touches no other
+ * file. (Property 11 — Manual-Input-Only Scope.)
+ */
+const SPEC_07_SOURCE_FILES = [
+  'src/types/index.ts',
+  'src/lib/review-queue.ts',
+  'src/lib/review-queue-storage.ts',
+  'src/components/ReviewQueue.tsx',
+  'src/popup/Popup.tsx',
+];
+
+/**
+ * The queue *logic + storage + component* files only. `Popup.tsx` is intentionally
+ * excluded from the no-network scan because it legitimately wires the existing
+ * Spec 01 connection-status check through the api-client (`checkStatus`); it is
+ * still covered by the forbidden-scope token scan below (where it stays clean).
+ */
+const SPEC_07_QUEUE_LOGIC_FILES = [
+  'src/lib/review-queue.ts',
+  'src/lib/review-queue-storage.ts',
+  'src/components/ReviewQueue.tsx',
+];
+
+/**
+ * Out-of-scope tokens that must never appear in Spec 07 source or the manifest
+ * (Property 11 — Manual-Input-Only Scope). Matched case-insensitively.
+ * Deliberately SPECIFIC so legitimate identifiers / prose are not flagged:
+ *   - the Worker-route tokens are the spec-prohibited queue/draft routes
+ *     (`/v1/draft`, `/v1/queue`, `/v1/review`) — NOT a bare `/v1/`, because the
+ *     shared types module legitimately references `/v1/status` and `/v1/compare`
+ *     (Spec 01 / Spec 04), so a bare `/v1/` scan would false-positive on those.
+ *   - bare `openai` / `llm` / `ai` are NOT scanned: like the Spec 06 block, were
+ *     they to appear they would only be inside file-header compliance doc comments
+ *     ("no OpenAI / LLM / AI provider"), so a bare-substring scan would
+ *     false-positive on documentation rather than a real violation. The no-AI
+ *     guarantee is instead enforced positively by the no-network call-form scan
+ *     below (the queue is storage-only and makes no network/AI call).
+ */
+const SPEC_07_FORBIDDEN_SCOPE_TOKENS = [
+  'reddit.com',
+  'old.reddit.com',
+  'chrome.alarms',
+  'chrome.notifications',
+  'content_scripts',
+  'firecrawl',
+  'scraping',
+  'ip rotation',
+  '/v1/draft',
+  '/v1/queue',
+  '/v1/review',
+];
+
+/**
+ * Posting / automation control tokens that must never appear in the queue panel
+ * or the popup (Property 11 — No Posting Controls). The Review_Queue's only data
+ * egress is the local clipboard for manual copy; there is no post/submit/comment/
+ * vote/auto-post control of any kind. Reuses the Spec 06 list. Matched
+ * case-insensitively; deliberately specific so the panel's compliance copy
+ * ("…posting manually yourself" / "…posted automatically") is not flagged.
+ */
+const SPEC_07_POSTING_AUTOMATION_TOKENS = [
+  'upvote',
+  'downvote',
+  '/api/submit',
+  '/api/comment',
+  '/api/vote',
+  'submitform',
+  'autopost',
+  'auto-post',
+  'auto_submit',
+];
+
+describe('Spec 07 — Review Queue permission containment (Property 12)', () => {
+  // Req 12.1, 13.6 — Spec 07 adds no permission and no host. These intentionally
+  // duplicate the Spec 05/06 manifest assertions; that duplication is the point —
+  // it states the invariant freshly as a Spec 07 guarantee.
+  const manifest = JSON.parse(
+    readFileSync(resolve(EXTENSION_ROOT, 'manifest.json'), 'utf-8')
+  );
+
+  it('keeps manifest.permissions exactly ["storage"] (no alarms/notifications/tabs/scripting/activeTab)', () => {
+    expect(manifest.permissions).toEqual(['storage']);
+  });
+
+  it('keeps host_permissions exactly the three approved entries byte-for-byte (no reddit.com host)', () => {
+    expect(manifest.host_permissions).toEqual([
+      'https://*.workers.dev/*',
+      'http://localhost/*',
+      'http://127.0.0.1/*',
+    ]);
+  });
+
+  it('still declares no content_scripts', () => {
+    expect(manifest.content_scripts).toBeUndefined();
+  });
+});
+
+describe('Spec 07 — Review Queue manual-input-only scope exclusion (Properties 10, 11)', () => {
+  // Req 9.6, 12.2, 12.3, 12.4, 12.5, 12.6, 12.7, 12.8.
+
+  it('Spec 07 source files contain none of the out-of-scope tokens', () => {
+    for (const relativePath of SPEC_07_SOURCE_FILES) {
+      const content = readFileSync(resolve(EXTENSION_ROOT, relativePath), 'utf-8').toLowerCase();
+      for (const token of SPEC_07_FORBIDDEN_SCOPE_TOKENS) {
+        expect(
+          content.includes(token),
+          `${relativePath} unexpectedly references "${token}"`
+        ).toBe(false);
+      }
+    }
+  });
+
+  it('the manifest contains none of the Spec 07 out-of-scope tokens', () => {
+    const manifestRaw = readFileSync(
+      resolve(EXTENSION_ROOT, 'manifest.json'),
+      'utf-8'
+    ).toLowerCase();
+    for (const token of SPEC_07_FORBIDDEN_SCOPE_TOKENS) {
+      expect(manifestRaw.includes(token), `manifest references "${token}"`).toBe(false);
+    }
+  });
+
+  it('the queue logic + storage + component files make no network call (no fetch / authenticatedFetch / XMLHttpRequest call form)', () => {
+    // Req 9.6, 12.4 — every queue operation runs entirely locally against
+    // chrome.storage.local; there is no Worker/draft-endpoint usage in the queue
+    // logic, storage adapter, or panel. We scan the *call form* (`fetch(`,
+    // `authenticatedfetch(`, `xmlhttprequest(`) rather than the bare name because
+    // `review-queue-storage.ts` legitimately *documents*, in its header compliance
+    // comment, that it performs "no fetch, no authenticatedFetch, no XMLHttpRequest"
+    // — a bare-substring scan for `xmlhttprequest` would false-positive on that
+    // documentation (exactly the openai/llm situation the Spec 06 block notes),
+    // whereas the call form catches a real invocation (`new XMLHttpRequest()`).
+    for (const relativePath of SPEC_07_QUEUE_LOGIC_FILES) {
+      const content = readFileSync(resolve(EXTENSION_ROOT, relativePath), 'utf-8').toLowerCase();
+      expect(content.includes('fetch('), `${relativePath} calls fetch(`).toBe(false);
+      expect(
+        content.includes('authenticatedfetch('),
+        `${relativePath} calls authenticatedFetch(`
+      ).toBe(false);
+      expect(
+        content.includes('xmlhttprequest('),
+        `${relativePath} instantiates XMLHttpRequest`
+      ).toBe(false);
+    }
+  });
+
+  it('the queue panel and popup contain no posting/automation control tokens', () => {
+    // Req 12.7, 12.8 — the Review_Queue exposes no automated posting/commenting/
+    // voting/DM/submit control; its only data egress is the local clipboard.
+    for (const relativePath of ['src/components/ReviewQueue.tsx', 'src/popup/Popup.tsx']) {
+      const content = readFileSync(resolve(EXTENSION_ROOT, relativePath), 'utf-8').toLowerCase();
+      for (const token of SPEC_07_POSTING_AUTOMATION_TOKENS) {
+        expect(
+          content.includes(token),
+          `${relativePath} unexpectedly references posting/automation token "${token}"`
+        ).toBe(false);
+      }
+    }
+  });
+
+  it('the queue panel copies via navigator.clipboard.writeText only (no posting controls)', () => {
+    // Req 12.7, 12.8 — the only egress mechanism is the clipboard write for manual
+    // copy; the panel exposes no post/submit/auto-post control. Positive assertion
+    // mirroring the Spec 06 DraftCoPilot clipboard assertion.
+    const queuePanel = readFileSync(
+      resolve(EXTENSION_ROOT, 'src/components/ReviewQueue.tsx'),
+      'utf-8'
+    );
+    expect(queuePanel).toContain('navigator.clipboard.writeText');
+    const lowered = queuePanel.toLowerCase();
+    for (const token of SPEC_07_POSTING_AUTOMATION_TOKENS) {
+      expect(lowered.includes(token), `ReviewQueue references "${token}"`).toBe(false);
+    }
+  });
+
+  // WORKER-API: the existing security-boundary suite does NOT scan worker-api
+  // *source* for routes (it only reads `worker-api/wrangler.toml` to assert no
+  // secrets in [vars]); per the no-over-engineering convention we add no new
+  // worker-api filesystem reads here. Spec 07 introduces NO worker-api change —
+  // the queue is a local, extension-static slice with no new `/v1` Worker route —
+  // so this block stays extension-only, and the forbidden-scope token scan above
+  // already proves the extension references no `/v1/draft`, `/v1/queue`, or
+  // `/v1/review` route.
+});

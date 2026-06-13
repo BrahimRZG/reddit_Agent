@@ -7,6 +7,7 @@ import { STORAGE_KEYS } from '../types';
 import { ACKNOWLEDGEMENT_VERSION, REQUIRED_ACKNOWLEDGEMENT_ITEM_IDS } from '../lib/onboarding';
 import type { AcknowledgementRecord } from '../types';
 import { generateDraft, validateDraftInput } from '../lib/draft-generator';
+import { ReviewQueue } from '../components/ReviewQueue';
 
 // Spec 06, Task 6.15: wrap the REAL draft-generator functions as spies so we can
 // assert they are never invoked before the OnboardingGate completes (Req 11.2).
@@ -22,6 +23,19 @@ vi.mock('../lib/draft-generator', async (importOriginal) => {
     validateDraftInput: vi.fn(actual.validateDraftInput),
   };
 });
+
+// Spec 07, Task 6.12: mock the ReviewQueue component (mirroring the draft-generator
+// mock above) so the popup gate tests can observe whether the panel MOUNTS. The mock
+// renders a lightweight sentinel <div data-testid="review-queue-mock" /> and is a
+// vi.fn, so we can assert both its presence in the DOM and its mount call-count.
+// Because the real ReviewQueue runs `readQueue()` on mount, a 0 mount-count proves the
+// real queue's read/write/mutation logic could never have fired before the gate opened
+// (Req 11.2). vi.clearAllMocks() in beforeEach resets the call count but PRESERVES the
+// implementation, so the sentinel still renders in every test.
+vi.mock('../components/ReviewQueue', () => ({
+  ReviewQueue: vi.fn(() => <div data-testid="review-queue-mock" />),
+}));
+const mockReviewQueue = vi.mocked(ReviewQueue);
 
 const ONBOARDING_KEY = STORAGE_KEYS.ONBOARDING;
 
@@ -208,3 +222,124 @@ describe('Popup — draft generation is not invoked before gate completion (Spec
   });
 });
 
+describe('Popup — Review Queue gate behavior (Spec 07, Req 11.1–11.5)', () => {
+  // Feature: review-queue, Property 13: Gate Containment — the Review_Queue lives
+  // inside the OnboardingGate and does not mount/render/run any queue logic
+  // (including readQueue-on-mount) until Compliance_Onboarding is complete;
+  // completing it preserves the Spec 05 Intent_Scanner and Spec 06 Draft_Co_Pilot
+  // sections below which the Review_Queue renders (Req 11.1–11.5).
+
+  it('incomplete onboarding does not render ReviewQueue', async () => {
+    // No onboarding record in `store` → incomplete (missing).
+    render(<Popup />);
+
+    // The Onboarding_Screen is shown instead of the gated app body.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /accept and continue/i })).toBeTruthy()
+    );
+
+    // The Review_Queue panel is not mounted and its sentinel is absent (Req 11.2).
+    expect(screen.queryByTestId('review-queue-mock')).toBeNull();
+    expect(mockReviewQueue).not.toHaveBeenCalled();
+  });
+
+  it('read_error onboarding does not render ReviewQueue', async () => {
+    // Drive OnboardingGate into its fail-closed read_error state by making the
+    // onboarding storage read throw. The gate resolves to read_error and never
+    // renders children, so the Review_Queue never mounts (Req 11.2).
+    mockGet.mockRejectedValueOnce(new Error('read failed'));
+
+    render(<Popup />);
+
+    // The recoverable read-error UI is shown (text + Retry), not the app body.
+    await waitFor(() =>
+      expect(screen.getByText(/couldn'?t read your onboarding status/i)).toBeTruthy()
+    );
+    expect(screen.getByRole('button', { name: /retry/i })).toBeTruthy();
+
+    // The Review_Queue panel is not mounted in the read_error state (Req 11.2).
+    expect(screen.queryByTestId('review-queue-mock')).toBeNull();
+    expect(mockReviewQueue).not.toHaveBeenCalled();
+  });
+
+  it('completed onboarding renders ReviewQueue, below IntentScanner and DraftCoPilot', async () => {
+    store.set(ONBOARDING_KEY, completeRecord);
+
+    render(<Popup />);
+
+    // Normal app body renders once onboarding is complete (Req 11.3).
+    await waitFor(() => expect(screen.getByText(/connected/i)).toBeTruthy());
+
+    // The Review_Queue panel is mounted (Req 11.3).
+    const reviewQueue = screen.getByTestId('review-queue-mock');
+    expect(reviewQueue).toBeTruthy();
+
+    // The Spec 05 Intent_Scanner and the Spec 06 Draft_Co_Pilot sections are both
+    // preserved and still render (Req 11.5).
+    const intentHeading = screen.getByText(/intent scanner/i);
+    const draftPanel = screen.getByTestId('draft-co-pilot');
+    expect(intentHeading).toBeTruthy();
+    expect(draftPanel).toBeTruthy();
+
+    // DOM ordering (Req 11.4): the Review_Queue renders as a distinct section BELOW
+    // both the Intent_Scanner and the Draft_Co_Pilot. DOCUMENT_POSITION_FOLLOWING
+    // means the second node follows the first in document order.
+    //   Intent_Scanner heading → Draft_Co_Pilot panel → Review_Queue panel
+    expect(
+      intentHeading.compareDocumentPosition(draftPanel) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      draftPanel.compareDocumentPosition(reviewQueue) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+});
+
+describe('Popup — Review Queue load logic is not invoked before gate completion (Req 11.2)', () => {
+  // Feature: review-queue, Property 13: Gate Containment. Because OnboardingGate does
+  // not render its children before Compliance_Onboarding completes (and fails closed
+  // on read_error), the (mocked) ReviewQueue never mounts. The mock stands in for the
+  // real component, whose mount effect runs readQueue(); a 0 mount-count therefore
+  // proves the real queue's read/write/mutation logic would never fire pre-completion.
+
+  it('incomplete onboarding → ReviewQueue mount spy not called', async () => {
+    // No onboarding record → incomplete.
+    render(<Popup />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /accept and continue/i })).toBeTruthy()
+    );
+
+    // The panel never mounted, so its real readQueue-on-mount effect never ran.
+    expect(mockReviewQueue).toHaveBeenCalledTimes(0);
+  });
+
+  it('read_error → ReviewQueue mount spy not called', async () => {
+    mockGet.mockRejectedValueOnce(new Error('read failed'));
+
+    render(<Popup />);
+
+    await waitFor(() =>
+      expect(screen.getByText(/couldn'?t read your onboarding status/i)).toBeTruthy()
+    );
+
+    // The panel never mounted in the read_error state, so its real readQueue-on-mount
+    // effect never ran.
+    expect(mockReviewQueue).toHaveBeenCalledTimes(0);
+  });
+
+  it('keeps Settings reachable while onboarding is incomplete (Req 11.5, 13.x)', async () => {
+    // Re-assert (without altering the existing entry-point test) that the always-on
+    // Settings affordance remains reachable while the gate withholds the app body.
+    render(<Popup />);
+
+    const settingsButton = screen.getByRole('button', { name: /open settings/i });
+    expect(settingsButton).toBeTruthy();
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /accept and continue/i })).toBeTruthy()
+    );
+
+    fireEvent.click(settingsButton);
+    expect(openOptionsPage).toHaveBeenCalledTimes(1);
+  });
+});
