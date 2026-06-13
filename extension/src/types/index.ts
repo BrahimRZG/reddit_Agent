@@ -124,3 +124,115 @@ export const STORAGE_KEYS = {
 export const DEFAULT_WORKER_API_URL = 'https://reddit-marketing-agent-api.workers.dev';
 
 // TODO: Spec 02 — Add install token types, auth state types
+
+
+// --- Intent Scanner Types (Spec 05) ---
+
+/**
+ * The Intent_Category assigned per classification (Req 3.1). Exactly one of
+ * these is returned by `classifyIntent`. `irrelevant` is the no-signal category
+ * (Req 3.5) and always carries a Confidence_Value of 0.0.
+ */
+export type IntentCategory =
+  | 'coupon-seeking'
+  | 'deal-seeking'
+  | 'product-comparison'
+  | 'generic-discussion'
+  | 'irrelevant';
+
+/**
+ * The Confidence_Value: a numeric score in the inclusive range 0.0..1.0 (Req 3.2).
+ * The bound invariant is enforced in code (clamping) and asserted in tests.
+ */
+export type Confidence = number;
+
+/** The enumerated Detected_Candidate `type` set (Req 4.2). */
+export type CandidateType = 'keyword' | 'tool_mention' | 'merchant_mention' | 'coupon_signal';
+
+/** A single extracted signal: a `type` from CandidateType and a string `value` (Req 4.2). */
+export interface DetectedCandidate {
+  type: CandidateType;
+  value: string;
+}
+
+/** The Intent_Classifier output: exactly one category + a bounded confidence (Req 3.1, 3.2). */
+export interface Classification {
+  category: IntentCategory;
+  confidence: Confidence;
+}
+
+/**
+ * Result of validating Operator-supplied Input_Text (Req 1.4, 1.5).
+ * - `valid`    → the (original) text is analyzable.
+ * - `empty`    → zero non-whitespace characters (Req 1.4).
+ * - `too_long` → length exceeds the 10000-character maximum (Req 1.5).
+ */
+export type InputValidation =
+  | { kind: 'valid'; text: string }
+  | { kind: 'empty' }
+  | { kind: 'too_long'; max: 10000 };
+
+/**
+ * The fresh-per-run local analysis result (the ScanResult concept). A
+ * discriminated union so the UI can render either a validation message or the
+ * full analyzed result. `analyzeInput` returns a brand-new value on every call
+ * and never reuses a prior input's result.
+ */
+export type AnalyzeResult =
+  | { kind: 'invalid'; reason: 'empty' | 'too_long' }
+  | {
+      kind: 'analyzed';
+      normalized: string;
+      classification: Classification;
+      candidates: DetectedCandidate[];
+    };
+
+// --- Compare request/response (mirrors the worker-api Spec 04 contract) ---
+
+/**
+ * Body POSTed to /v1/compare. `merchant` is required; the rest are optional.
+ * `max_results`, when present, is an integer in 1..50. Mirrors the worker
+ * `CompareRequest` contract without modifying worker-api.
+ */
+export interface CompareRequestBody {
+  merchant: string;
+  product?: string;
+  coupon_code?: string;
+  category?: string;
+  max_results?: number;
+}
+
+/** Normalized candidate echoed back in the success response (worker NormalizedCandidate). */
+export interface CompareCandidate {
+  merchant: string;
+  product?: string;
+  coupon_code?: string;
+  category?: string;
+}
+
+/** A single coupon/offer match (mirrors the worker `Match` shape). */
+export interface CompareMatch {
+  merchant: string;
+  coupon_code?: string;
+  description: string;
+  score: number;
+  source: string; // e.g. 'mock-couponsriver'
+}
+
+/** HTTP 200 success body for POST /v1/compare. Invariant: match_count === matches.length. */
+export interface CompareResponse {
+  candidate: CompareCandidate;
+  match_count: number;
+  matches: CompareMatch[];
+}
+
+/**
+ * Result of a Compare_Lookup as observed by the Intent_Scanner. Discriminated
+ * union consistent with StatusResult / VerifyAuthResult; reuses the existing
+ * ApiError categories for failures (Req 5.5, 5.6).
+ */
+export type CompareOutcome =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'success'; data: CompareResponse }
+  | { status: 'failure'; error: ApiError };

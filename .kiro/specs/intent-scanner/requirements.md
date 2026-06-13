@@ -43,7 +43,7 @@ The Intent_Scanner **MUST NOT** introduce, imply, or depend on any of the follow
 - **Text_Normalizer**: The local, deterministic, in-memory component that transforms Input_Text into Normalized_Text.
 - **Normalized_Text**: The output of the Text_Normalizer: a cleaned, case-consistent, whitespace-collapsed representation of Input_Text used by the Intent_Classifier and the Candidate_Extractor.
 - **Intent_Classifier**: The local, deterministic, in-memory component that assigns exactly one Intent_Category and one Confidence_Value to Normalized_Text.
-- **Intent_Category**: Exactly one value from the enumerated set defined in the Extension source code: `recommendation_request`, `comparison_request`, `pricing_question`, `deal_or_coupon_request`, `general_discussion`, and `none`.
+- **Intent_Category**: Exactly one value from the enumerated set defined in the Extension source code: `coupon-seeking`, `deal-seeking`, `product-comparison`, `generic-discussion`, and `irrelevant`.
 - **Confidence_Value**: A numeric score in the inclusive range `0.0` to `1.0` that expresses how strongly the Normalized_Text matches the assigned Intent_Category.
 - **Candidate_Extractor**: The local, deterministic, in-memory component that produces a list of zero or more Detected_Candidate items from Normalized_Text.
 - **Detected_Candidate**: A single extracted signal with a `type` and a `value`. The `type` is one value from the enumerated set defined in the Extension source code: `keyword`, `tool_mention`, `merchant_mention`, and `coupon_signal`. The `value` is the extracted text string.
@@ -91,7 +91,7 @@ The Intent_Scanner **MUST NOT** introduce, imply, or depend on any of the follow
 2. THE Intent_Classifier SHALL assign a Confidence_Value within the inclusive range 0.0 to 1.0 for each classification.
 3. WHEN the Intent_Classifier processes identical Normalized_Text, THE Intent_Classifier SHALL return an identical Intent_Category and an identical Confidence_Value on every invocation.
 4. THE Intent_Classifier SHALL compute the Intent_Category and the Confidence_Value using only local, in-memory logic and SHALL perform no network request.
-5. WHERE Normalized_Text matches no classification signal, THE Intent_Classifier SHALL assign the Intent_Category `none` with a Confidence_Value of 0.0.
+5. WHERE Normalized_Text matches no classification signal, THE Intent_Classifier SHALL assign the Intent_Category `irrelevant` with a Confidence_Value of 0.0.
 6. THE Intent_Classifier SHALL derive the Intent_Category and the Confidence_Value solely from Normalized_Text.
 
 ### Requirement 4: Deterministic Candidate Extraction
