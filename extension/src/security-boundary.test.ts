@@ -187,3 +187,191 @@ describe('Spec 05 — Manual-input-only scope exclusion (Property 9)', () => {
     expect(compareSource).not.toContain('/v1/scan');
   });
 });
+
+// --- Spec 06: Draft Co-Pilot scope & permission containment ---
+
+/**
+ * Spec 06 source files (local, deterministic, Extension-UI-only Draft_Co_Pilot):
+ * the shared types module, the two pure logic modules, the React panel, and the
+ * popup wiring. The drafting path touches no other file.
+ */
+const SPEC_06_SOURCE_FILES = [
+  'src/types/index.ts',
+  'src/lib/draft-compliance.ts',
+  'src/lib/draft-generator.ts',
+  'src/components/DraftCoPilot.tsx',
+  'src/popup/Popup.tsx',
+];
+
+/**
+ * The draft *logic + component* files only. `Popup.tsx` is intentionally
+ * excluded from the no-network scan because it legitimately wires the existing
+ * Spec 01 connection-status check through the api-client (`checkStatus`);
+ * `Popup.tsx` is still covered by the forbidden-scope token scan below (where it
+ * stays clean).
+ */
+const SPEC_06_DRAFT_LOGIC_FILES = [
+  'src/lib/draft-generator.ts',
+  'src/lib/draft-compliance.ts',
+  'src/components/DraftCoPilot.tsx',
+];
+
+/**
+ * Out-of-scope tokens that must never appear in Spec 06 source or the manifest
+ * (Property 11 — Manual-Input-Only Scope). Matched case-insensitively.
+ * Deliberately specific (e.g. `/v1/draft`, not bare `draft`) so legitimate
+ * identifiers are not flagged.
+ *
+ * NOTE: `openai` and `llm` are intentionally NOT scanned as bare tokens here.
+ * The Spec 06 draft modules legitimately *document* that they MUST NOT call
+ * "OpenAI / LLM / AI provider" in their file-header compliance comments, so a
+ * bare-substring scan would false-positive on that documentation rather than on
+ * a real violation. The no-network / no-AI guarantee is instead enforced
+ * positively by the no-`fetch`/no-`authenticatedFetch`/no-`XMLHttpRequest`
+ * assertions below and by the generator's own property tests (Property 2).
+ * `/v1/draft` keeps the Worker-draft-endpoint prohibition meaningful.
+ */
+const SPEC_06_FORBIDDEN_SCOPE_TOKENS = [
+  '/v1/draft',
+  'chrome.alarms',
+  'chrome.notifications',
+  'content_scripts',
+  'reddit.com',
+  'old.reddit.com',
+  'firecrawl',
+  'scraping',
+  'ip rotation',
+];
+
+/**
+ * Posting / automation control tokens that must never appear in the draft panel
+ * or the popup (Property 10 — No Posting Controls). The Draft_Co_Pilot's only
+ * controls are "Generate draft" and "Copy"; there is no post/submit/comment/
+ * vote/auto-post control of any kind. Matched case-insensitively; deliberately
+ * specific so the panel's compliance copy ("…post them yourself") is not flagged.
+ */
+const SPEC_06_POSTING_AUTOMATION_TOKENS = [
+  'upvote',
+  'downvote',
+  '/api/submit',
+  '/api/comment',
+  '/api/vote',
+  'submitform',
+  'autopost',
+  'auto-post',
+  'auto_submit',
+];
+
+describe('Spec 06 — Draft Co-Pilot permission containment (Property 12)', () => {
+  // Req 10.5, 12.1, 12.6, 13.6 — Spec 06 adds no permission and no host.
+  const manifest = JSON.parse(
+    readFileSync(resolve(EXTENSION_ROOT, 'manifest.json'), 'utf-8')
+  );
+
+  it('keeps manifest.permissions exactly ["storage"] (no alarms/notifications/tabs/scripting/activeTab)', () => {
+    expect(manifest.permissions).toEqual(['storage']);
+  });
+
+  it('keeps host_permissions exactly the three approved entries (no reddit.com / old.reddit.com host)', () => {
+    expect(manifest.host_permissions).toEqual([
+      'https://*.workers.dev/*',
+      'http://localhost/*',
+      'http://127.0.0.1/*',
+    ]);
+  });
+
+  it('still declares no content_scripts', () => {
+    expect(manifest.content_scripts).toBeUndefined();
+  });
+});
+
+describe('Spec 06 — Draft Co-Pilot manual-input-only scope exclusion (Properties 10, 11)', () => {
+  // Req 1.5, 12.2, 12.3, 12.4, 12.5, 12.7, 12.8, 12.9, 12.10, 12.11.
+
+  it('Spec 06 source files contain none of the out-of-scope tokens', () => {
+    for (const relativePath of SPEC_06_SOURCE_FILES) {
+      const content = readFileSync(resolve(EXTENSION_ROOT, relativePath), 'utf-8').toLowerCase();
+      for (const token of SPEC_06_FORBIDDEN_SCOPE_TOKENS) {
+        expect(
+          content.includes(token),
+          `${relativePath} unexpectedly references "${token}"`
+        ).toBe(false);
+      }
+    }
+  });
+
+  it('the manifest contains none of the Spec 06 out-of-scope tokens', () => {
+    const manifestRaw = readFileSync(
+      resolve(EXTENSION_ROOT, 'manifest.json'),
+      'utf-8'
+    ).toLowerCase();
+    for (const token of SPEC_06_FORBIDDEN_SCOPE_TOKENS) {
+      expect(manifestRaw.includes(token), `manifest references "${token}"`).toBe(false);
+    }
+  });
+
+  it('the draft logic + component files make no network call (no fetch / authenticatedFetch / XMLHttpRequest)', () => {
+    // Req 3.3, 3.4, 12.10, 12.11 — drafting is purely local/in-memory. We scan
+    // for the *call form* (`fetch(` / `authenticatedfetch(`) because the modules
+    // document, in their header comments, that they MUST NOT call those
+    // functions; scanning the call form catches a real invocation without
+    // false-positiving on that compliance documentation.
+    for (const relativePath of SPEC_06_DRAFT_LOGIC_FILES) {
+      const content = readFileSync(resolve(EXTENSION_ROOT, relativePath), 'utf-8').toLowerCase();
+      expect(content.includes('fetch('), `${relativePath} calls fetch(`).toBe(false);
+      expect(
+        content.includes('authenticatedfetch('),
+        `${relativePath} calls authenticatedFetch(`
+      ).toBe(false);
+      expect(
+        content.includes('xmlhttprequest'),
+        `${relativePath} references XMLHttpRequest`
+      ).toBe(false);
+    }
+  });
+
+  it('the draft panel and popup contain no posting/automation control tokens', () => {
+    for (const relativePath of ['src/components/DraftCoPilot.tsx', 'src/popup/Popup.tsx']) {
+      const content = readFileSync(resolve(EXTENSION_ROOT, relativePath), 'utf-8').toLowerCase();
+      for (const token of SPEC_06_POSTING_AUTOMATION_TOKENS) {
+        expect(
+          content.includes(token),
+          `${relativePath} unexpectedly references posting/automation token "${token}"`
+        ).toBe(false);
+      }
+    }
+  });
+
+  it('the draft panel copies via navigator.clipboard.writeText only (no posting controls)', () => {
+    // Req 10.3, 10.4, 12.8, 12.9 — the only "copy" mechanism is the clipboard
+    // write; the panel exposes no post/submit/auto-post control.
+    const draftPanel = readFileSync(
+      resolve(EXTENSION_ROOT, 'src/components/DraftCoPilot.tsx'),
+      'utf-8'
+    );
+    expect(draftPanel).toContain('navigator.clipboard.writeText');
+    const lowered = draftPanel.toLowerCase();
+    for (const token of SPEC_06_POSTING_AUTOMATION_TOKENS) {
+      expect(lowered.includes(token), `DraftCoPilot references "${token}"`).toBe(false);
+    }
+  });
+
+  it('neither the draft panel nor the popup adds Reddit automation strings', () => {
+    // Req 12.2, 12.5, 12.8, 12.9 — no new reddit.com host string and no
+    // posting/automation control surface in the draft panel or the popup.
+    const redditAndAutomationTokens = [
+      'reddit.com',
+      'old.reddit.com',
+      ...SPEC_06_POSTING_AUTOMATION_TOKENS,
+    ];
+    for (const relativePath of ['src/components/DraftCoPilot.tsx', 'src/popup/Popup.tsx']) {
+      const content = readFileSync(resolve(EXTENSION_ROOT, relativePath), 'utf-8').toLowerCase();
+      for (const token of redditAndAutomationTokens) {
+        expect(
+          content.includes(token),
+          `${relativePath} unexpectedly references "${token}"`
+        ).toBe(false);
+      }
+    }
+  });
+});
