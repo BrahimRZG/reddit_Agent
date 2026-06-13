@@ -236,3 +236,92 @@ export type CompareOutcome =
   | { status: 'loading' }
   | { status: 'success'; data: CompareResponse }
   | { status: 'failure'; error: ApiError };
+// --- Draft Co-Pilot Types (Spec 06) ---
+
+/** The three Reply_Modes, exactly as enumerated in the Glossary (Req 2.1). */
+export type DraftMode = 'no-link-authority' | 'soft-cta-with-disclosure' | 'disclosed-link';
+
+/**
+ * Optional Spec 05 intent analysis carried over by the Operator (Req 1.2).
+ * Reuses Spec 05 types verbatim — no modification to Spec 05.
+ */
+export interface IntentContext {
+  classification: Classification;
+  candidates: DetectedCandidate[];
+}
+
+/**
+ * Optional Spec 04 compare result carried over by the Operator (Req 1.3).
+ * Reuses the Spec 04 CompareResponse shape verbatim — no modification to Spec 04.
+ */
+export type CompareContext = CompareResponse;
+
+/** The full Operator-supplied drafting context (Req 1). */
+export interface DraftInput {
+  sourceText: string;
+  mode: DraftMode;
+  couponsRiverUrl?: string;
+  intentContext?: IntentContext;
+  compareContext?: CompareContext;
+}
+
+/** Validation outcome before generation (Req 1.6, 1.7, 1.8, 2.2). */
+export type DraftInputValidation =
+  | { kind: 'valid' }
+  | { kind: 'empty' }
+  | { kind: 'too_long'; max: 10000 }
+  | { kind: 'no_mode' };
+
+/** Stable identifiers for each Compliance_Warning (Req 9). */
+export type ComplianceWarningId =
+  | 'manual_review'
+  | 'subreddit_rules'
+  | 'no_automated_action'
+  | 'disclosure_required'
+  | 'missing_link'
+  | 'add_link_manually'
+  | 'unsafe_concealing'
+  | 'unsafe_no_disclosure';
+
+/** A single plain-language warning attached to a Draft_Result (Req 9). */
+export interface ComplianceWarning {
+  id: ComplianceWarningId;
+  message: string;
+}
+
+/** Successful generator output (Req 3.1). */
+export interface DraftResult {
+  kind: 'draft';
+  mode: DraftMode;
+  draftText: string;
+  warnings: ComplianceWarning[];
+  safety: 'safe' | 'unsafe';
+}
+
+/** Typed Failure_State (Req 3.6–3.8). */
+export interface FailureState {
+  kind: 'failure';
+  code: 'generation_error' | 'resource_limit';
+  message: string;
+}
+
+export const MAX_SOURCE_LENGTH = 10000;
+
+export const AFFILIATION_DISCLOSURE = "Full disclosure: I'm affiliated with CouponsRiver.";
+
+export const COMPLIANCE_WARNING_MESSAGES: Record<ComplianceWarningId, string> = {
+  manual_review: 'Review and edit this draft before posting it yourself.',
+  subreddit_rules: "Check the subreddit's rules before posting.",
+  no_automated_action:
+    'This extension takes no automated Reddit action — you post manually.',
+  disclosure_required:
+    'Promotional drafts must disclose your CouponsRiver affiliation.',
+  missing_link:
+    'No link was provided, so no CouponsRiver URL is included in this draft.',
+  add_link_manually:
+    'You may add a specific CouponsRiver link manually after reviewing the draft.',
+  unsafe_concealing:
+    'Concealing language was detected — this draft is not ready to post.',
+  unsafe_no_disclosure:
+    'This promotional draft is missing the affiliation disclosure — it is not ready to post.',
+};
