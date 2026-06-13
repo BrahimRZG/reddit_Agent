@@ -612,7 +612,7 @@ describe('validator boundaries (unit)', () => {
   });
 
   it('draft text: whitespace-only is empty (same as empty string)', () => {
-    expect(validateDraftText('   \\t\\n ')).toEqual({ kind: 'empty' });
+    expect(validateDraftText(`   \t\n `)).toEqual({ kind: 'empty' });
   });
 
   it('note: 2000 valid, 2001 too_long', () => {
