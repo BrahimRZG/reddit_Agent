@@ -117,7 +117,8 @@ export type OnboardingState =
 /** Keys used in chrome.storage.local */
 export const STORAGE_KEYS = {
   WORKER_API_BASE_URL: 'rma_worker_api_base_url', // Spec 01 (unchanged)
-  ONBOARDING: 'rma_onboarding_acknowledgement', // Spec 03 (new)
+  ONBOARDING: 'rma_onboarding_acknowledgement', // Spec 03 (unchanged)
+  REVIEW_QUEUE: 'rma_review_queue', // Spec 07 (new)
 } as const;
 
 /** Default Worker API URL used when no custom URL is configured */
