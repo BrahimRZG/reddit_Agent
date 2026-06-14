@@ -15,14 +15,13 @@
  * never a stack trace, file path, secret, environment value, or internal
  * implementation detail (Req 9.5).
  *
- * This file currently implements Task 3.1 only: the `ActivityLogStorageError`
- * class and the fail-safe `readLog`. `writeLog` and `clearLog` are intentionally
- * NOT part of this file yet.
+ * This file currently implements Tasks 3.1 and 3.2: the `ActivityLogStorageError`
+ * class, the fail-safe `readLog`, and the `writeLog` / `clearLog` persisters.
  */
 
 import { STORAGE_KEYS } from '../types';
-import type { LogReadOutcome } from '../types';
-import { deserializeLog } from './activity-log';
+import type { ActivityEntry, LogReadOutcome } from '../types';
+import { deserializeLog, serializeLog } from './activity-log';
 
 /**
  * Fixed, safe message for a read failure (Req 9.2, 9.5). Leaks no stack trace,
@@ -37,6 +36,14 @@ export const ACTIVITY_LOG_READ_ERROR_MESSAGE =
  */
 export const ACTIVITY_LOG_PARSE_ERROR_MESSAGE =
   "Your saved activity log couldn't be read and was left untouched.";
+
+/**
+ * Fixed, safe message for a write failure (Req 9.5). Like the read/parse
+ * messages, it leaks no stack trace, file path, secret, environment value, or
+ * internal detail.
+ */
+export const ACTIVITY_LOG_WRITE_ERROR_MESSAGE =
+  "Couldn't save your activity log. Please try again.";
 
 /** Custom error for activity-log write failures (parallels ReviewQueueStorageError). */
 export class ActivityLogStorageError extends Error {
@@ -82,4 +89,39 @@ export async function readLog(): Promise<LogReadOutcome> {
 
   // Array-shaped: drop malformed individual entries (Req 9.6).
   return { ok: true, entries: deserializeLog(raw) };
+}
+
+
+/**
+ * Persist the Activity_Log under `STORAGE_KEYS.ACTIVITY_LOG` (Req 8.3). Writes the
+ * `serializeLog` plain JSON-safe structure. On failure it throws an
+ * `ActivityLogStorageError` carrying a fixed, safe message (the caught error is
+ * never leaked); callers catch it and surface a recoverable error.
+ *
+ * No network request; nothing is transmitted to the Worker_API or any external
+ * service (Req 8.5, 8.6, 11.4).
+ */
+export async function writeLog(entries: ActivityEntry[]): Promise<void> {
+  try {
+    await chrome.storage.local.set({ [STORAGE_KEYS.ACTIVITY_LOG]: serializeLog(entries) });
+  } catch {
+    throw new ActivityLogStorageError(ACTIVITY_LOG_WRITE_ERROR_MESSAGE);
+  }
+}
+
+/**
+ * Clear the entire Activity_Log by persisting an empty array under
+ * `STORAGE_KEYS.ACTIVITY_LOG` (Req 7.4, 7.5). On failure it throws an
+ * `ActivityLogStorageError` carrying a fixed, safe message (the caught error is
+ * never leaked).
+ *
+ * No network request; nothing is transmitted to the Worker_API or any external
+ * service (Req 8.5, 8.6, 11.4).
+ */
+export async function clearLog(): Promise<void> {
+  try {
+    await chrome.storage.local.set({ [STORAGE_KEYS.ACTIVITY_LOG]: [] });
+  } catch {
+    throw new ActivityLogStorageError(ACTIVITY_LOG_WRITE_ERROR_MESSAGE);
+  }
 }
