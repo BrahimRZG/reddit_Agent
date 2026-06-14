@@ -14,11 +14,12 @@
  * duplicated here. The storage adapter (`activity-log-storage.ts`), the recorder,
  * the export delivery, and the UI are intentionally NOT part of this file.
  *
- * This file currently implements Task 2.1 only: the injected seams, the Summary
- * length clamp, the redaction-safe summary renderer, and `createEntry`.
+ * This file currently implements Tasks 2.1 and 2.2: the injected seams, the
+ * Summary length clamp, the redaction-safe summary renderer, `createEntry`, the
+ * FIFO-bounded `appendEntry`, and the newest-first ordering.
  */
-import { MAX_SUMMARY_LEN, REVIEW_STATUS_LABELS } from '../types';
-import type { ActionType, ActivityEntry, SummaryParts } from '../types';
+import { MAX_LOG_ENTRIES, MAX_SUMMARY_LEN, REVIEW_STATUS_LABELS } from '../types';
+import type { ActionType, ActivityEntry, ActivityLog, SummaryParts } from '../types';
 
 // --- Injected seams (design.md Section 5.3) ----------------------------------
 
@@ -110,4 +111,44 @@ export function createEntry(
     created_at: clock.now(),
     summary: clampSummary(renderSummary(type, summaryParts)),
   };
+}
+
+
+// --- 2.2 Append with FIFO bound ----------------------------------------------
+
+/**
+ * Append an Activity_Entry to the log, enforcing the MAX_LOG_ENTRIES bound
+ * (Req 4.1, 4.2, 4.4). Pure: returns a brand-new array and NEVER mutates the
+ * input `log`. When appending would exceed MAX_LOG_ENTRIES, the OLDEST entries
+ * are dropped first (FIFO) so the result holds exactly MAX_LOG_ENTRIES of the
+ * most recent entries; the relative order of the retained entries is preserved.
+ */
+export function appendEntry(log: ActivityLog, entry: ActivityEntry): ActivityLog {
+  const next = [...log, entry];
+  if (next.length <= MAX_LOG_ENTRIES) {
+    return next;
+  }
+  // Drop the oldest entries first (from the front), keeping the most recent
+  // MAX_LOG_ENTRIES and preserving their relative order.
+  return next.slice(next.length - MAX_LOG_ENTRIES);
+}
+
+// --- 2.2 Newest-first ordering -----------------------------------------------
+
+/**
+ * Return the entries ordered newest-first (Req 7.1): `created_at` descending,
+ * with a stable total-order tie-break of `id` ascending. Pure: returns a
+ * brand-new array and NEVER mutates the input `log`. `created_at` is an ISO 8601
+ * string, so lexicographic comparison is chronological.
+ */
+export function orderNewestFirst(log: ActivityLog): ActivityEntry[] {
+  return [...log].sort((a, b) => {
+    if (a.created_at !== b.created_at) {
+      return a.created_at < b.created_at ? 1 : -1; // created_at descending
+    }
+    if (a.id !== b.id) {
+      return a.id < b.id ? -1 : 1; // id ascending tie-break
+    }
+    return 0;
+  });
 }
