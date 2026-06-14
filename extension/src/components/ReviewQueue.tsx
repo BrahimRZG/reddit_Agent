@@ -29,6 +29,7 @@ import {
   type QueueClock,
 } from '../lib/review-queue';
 import { readQueue, ReviewQueueStorageError, writeQueue } from '../lib/review-queue-storage';
+import { recordActivity } from '../lib/activity-recorder';
 
 /** Optional props (Req 1.1–1.3). When a Spec 06 Draft_Result is supplied, the panel
  * offers a control to save it into the queue. Popup is not modified by this task, so
@@ -160,12 +161,15 @@ export function ReviewQueue({ draftResult }: ReviewQueueProps) {
       );
       return;
     }
-    const added = addItem(queue, createManualItem(manualText, clock, ids));
+    const item = createManualItem(manualText, clock, ids);
+    const added = addItem(queue, item);
     if (!added.ok) {
       setMessage('manual', reasonMessage(added.reason, added.max));
       return;
     }
     if (await persist(added.queue)) {
+      // Best-effort, non-blocking compliance log (Spec 08-A) — only on success.
+      recordActivity('draft_saved', { itemId: item.id });
       setManualText('');
     }
   };
@@ -175,18 +179,25 @@ export function ReviewQueue({ draftResult }: ReviewQueueProps) {
       return;
     }
     clearMessage('draft-result');
-    const added = addItem(queue, createItemFromDraftResult(draftResult, clock, ids));
+    const item = createItemFromDraftResult(draftResult, clock, ids);
+    const added = addItem(queue, item);
     if (!added.ok) {
       setMessage('draft-result', reasonMessage(added.reason, added.max));
       return;
     }
-    await persist(added.queue);
+    if (await persist(added.queue)) {
+      // Best-effort, non-blocking compliance log (Spec 08-A) — only on success.
+      recordActivity('draft_saved', { itemId: item.id });
+    }
   };
 
   // --- Per-item mutations ------------------------------------------------------
 
   const handleStatusChange = async (id: string, status: ReviewStatus) => {
-    await persist(setStatus(queue, id, status, clock));
+    if (await persist(setStatus(queue, id, status, clock))) {
+      // Best-effort, non-blocking compliance log (Spec 08-A) — only on success.
+      recordActivity('status_changed', { itemId: id, status });
+    }
   };
 
   const handleNoteSave = async (id: string) => {
@@ -268,6 +279,8 @@ export function ReviewQueue({ draftResult }: ReviewQueueProps) {
     }
     try {
       await navigator.clipboard.writeText(text);
+      // Best-effort, non-blocking compliance log (Spec 08-A) — only on success.
+      recordActivity('draft_copied', { itemId: id });
       setCopiedId(id);
     } catch {
       // Clipboard write failed; manual selection remains the fallback.
