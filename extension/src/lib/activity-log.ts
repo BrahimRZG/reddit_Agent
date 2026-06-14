@@ -14,9 +14,10 @@
  * duplicated here. The storage adapter (`activity-log-storage.ts`), the recorder,
  * the export delivery, and the UI are intentionally NOT part of this file.
  *
- * This file currently implements Tasks 2.1 and 2.2: the injected seams, the
+ * This file currently implements Tasks 2.1, 2.2, and 2.3: the injected seams, the
  * Summary length clamp, the redaction-safe summary renderer, `createEntry`, the
- * FIFO-bounded `appendEntry`, and the newest-first ordering.
+ * FIFO-bounded `appendEntry`, the newest-first ordering, the deterministic
+ * JSON/Markdown export renderers, and the serialize/deserialize round-trip.
  */
 import { MAX_LOG_ENTRIES, MAX_SUMMARY_LEN, REVIEW_STATUS_LABELS } from '../types';
 import type { ActionType, ActivityEntry, ActivityLog, SummaryParts } from '../types';
@@ -151,4 +152,111 @@ export function orderNewestFirst(log: ActivityLog): ActivityEntry[] {
     }
     return 0;
   });
+}
+
+
+// --- 2.3 Runtime guards (private) --------------------------------------------
+
+/** True when `value` is one of the enumerated Action_Type literals. */
+function isActionType(value: unknown): value is ActionType {
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(ACTION_TYPE_LABELS, value);
+}
+
+/**
+ * Runtime shape guard for a single stored Activity_Entry. An entry is well-formed
+ * only when it is a plain object with a string `id`, an enumerated `type`, a
+ * string `created_at`, and a string `summary`. Used by `deserializeLog` to drop
+ * malformed individual entries (Req 9.6).
+ */
+function isActivityEntry(value: unknown): value is ActivityEntry {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.id === 'string' &&
+    isActionType(candidate.type) &&
+    typeof candidate.created_at === 'string' &&
+    typeof candidate.summary === 'string'
+  );
+}
+
+/**
+ * Project an Activity_Entry to a plain object with a STABLE key order
+ * (id, type, created_at, summary). Used by both the JSON renderer and the
+ * serializer so neither can emit any field beyond the four redaction-safe ones.
+ */
+function toPlainEntry(entry: ActivityEntry): ActivityEntry {
+  return {
+    id: entry.id,
+    type: entry.type,
+    created_at: entry.created_at,
+    summary: entry.summary,
+  };
+}
+
+// --- 2.3 Deterministic JSON export -------------------------------------------
+
+/**
+ * Render the entire log as a deterministic JSON Export_Document (Req 5.1, 5.3,
+ * 5.5, 5.6). Each entry is emitted with a stable key order
+ * (id, type, created_at, summary) and fixed two-space indentation. An empty log
+ * yields the valid document `"[]"`. Pure: depends only on `log`; the same log
+ * always produces byte-identical output.
+ */
+export function toJsonDocument(log: ActivityLog): string {
+  return JSON.stringify(log.map(toPlainEntry), null, 2);
+}
+
+// --- 2.3 Deterministic Markdown export ---------------------------------------
+
+/**
+ * Render the entire log as a deterministic, human-readable Markdown
+ * Export_Document (Req 5.2, 5.4, 5.5, 5.6). Entries are rendered newest-first via
+ * `orderNewestFirst`, each showing its Action_Type, `created_at`, and Summary. An
+ * empty log yields a valid document with an empty-state line. Pure: the same log
+ * always produces byte-identical output.
+ */
+export function toMarkdownDocument(log: ActivityLog): string {
+  const lines: string[] = ['# Compliance Activity Log', ''];
+
+  const ordered = orderNewestFirst(log);
+  if (ordered.length === 0) {
+    lines.push('_No activity has been recorded._');
+    return lines.join('\n');
+  }
+
+  ordered.forEach((entry) => {
+    lines.push(`## ${entry.created_at}`);
+    lines.push(`- **Action:** ${entry.type}`);
+    lines.push(`- **Summary:** ${entry.summary}`);
+    lines.push('');
+  });
+
+  return lines.join('\n');
+}
+
+// --- 2.3 Serialize / deserialize round-trip ----------------------------------
+
+/**
+ * Map the log to a plain JSON-safe structure for persistence (Req 8.4). Pure;
+ * emits only the four redaction-safe fields in a stable key order.
+ */
+export function serializeLog(log: ActivityLog): unknown {
+  return log.map(toPlainEntry);
+}
+
+/**
+ * Parse a stored value back into well-formed Activity_Entries (Req 8.4, 9.6).
+ * Pure. A non-array input yields an empty list. Each element is validated with
+ * `isActivityEntry`; malformed individual entries are DROPPED while well-formed
+ * entries are retained, normalized to the stable four-field shape. For a valid
+ * entry `x`, `deserializeLog(serializeLog([x]))[0]` deep-equals `x` across `id`,
+ * `type`, `created_at`, and `summary`.
+ */
+export function deserializeLog(raw: unknown): ActivityEntry[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw.filter(isActivityEntry).map(toPlainEntry);
 }
