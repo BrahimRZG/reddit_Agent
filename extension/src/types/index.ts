@@ -119,6 +119,7 @@ export const STORAGE_KEYS = {
   WORKER_API_BASE_URL: 'rma_worker_api_base_url', // Spec 01 (unchanged)
   ONBOARDING: 'rma_onboarding_acknowledgement', // Spec 03 (unchanged)
   REVIEW_QUEUE: 'rma_review_queue', // Spec 07 (new)
+  ACTIVITY_LOG: 'rma_activity_log', // Spec 08-A (new)
 } as const;
 
 /** Default Worker API URL used when no custom URL is configured */
@@ -407,3 +408,54 @@ export const REVIEW_STATUS_LABELS: Record<ReviewStatus, string> = {
   approved_for_manual_use: 'Approved for manual use',
   rejected: 'Rejected',
 };
+
+
+// --- Activity Log Types (Spec 08-A) ---
+
+/**
+ * The enumerated compliance-relevant actions an Activity_Entry records (Req 1.1–1.5).
+ * Exactly one of these is carried by each Activity_Entry.
+ */
+export type ActionType =
+  | 'onboarding_completed'
+  | 'draft_saved'
+  | 'status_changed'
+  | 'draft_copied';
+
+/**
+ * Non-sensitive descriptors used to build a redaction-safe Summary (Req 1.6, 5.7).
+ * Reuses the Spec 07 ReviewStatus verbatim for the `status` descriptor. Never carries
+ * full draft text, Note text, credentials, or tokens.
+ */
+export interface SummaryParts {
+  itemId?: string; // a QueueItem id reference (non-sensitive)
+  status?: ReviewStatus; // a Spec 07 Review_Status value
+  detail?: string; // a short non-sensitive label, clamped to MAX_SUMMARY_LEN
+}
+
+/** A single append-only record of one compliance-relevant Operator action (Req 1, 2). */
+export interface ActivityEntry {
+  id: string; // stable Entry_Id, unique within the log (Req 2.1)
+  type: ActionType; // one of the enumerated Action_Types (Req 1.5)
+  created_at: string; // ISO 8601, set at append time, immutable (Req 2.2, 2.3)
+  summary: string; // redaction-safe, ≤ MAX_SUMMARY_LEN chars (Req 1.6, 4.3, 5.7)
+}
+
+/** The Activity_Log is the ordered, bounded, append-only collection of entries (Req 4). */
+export type ActivityLog = ActivityEntry[];
+
+/** The export format selector (Req 5). */
+export type ExportFormat = 'json' | 'markdown';
+
+/**
+ * Typed outcome of reading the Activity_Log from chrome.storage.local (Req 9.1).
+ * The failure `message` is a fixed, safe string — never a stack trace, file path,
+ * secret, environment value, or internal implementation detail (Req 9.5).
+ */
+export type LogReadOutcome =
+  | { ok: true; entries: ActivityEntry[] }
+  | { ok: false; error: 'read_error' | 'parse_error'; message: string };
+
+/** Storage / size bounds (Req 4). Single-sourced so transforms, the UI, and tests share them. */
+export const MAX_LOG_ENTRIES = 500; // total retained Activity_Entries (Req 4.1, 4.2)
+export const MAX_SUMMARY_LEN = 280; // Summary character length (Req 4.3)

@@ -566,3 +566,168 @@ describe('Spec 07 — Review Queue manual-input-only scope exclusion (Properties
   // already proves the extension references no `/v1/draft`, `/v1/queue`, or
   // `/v1/review` route.
 });
+
+
+// --- Spec 08-A: Compliance Activity Log & Export scope & permission containment ---
+
+/**
+ * Spec 08-A source files: shared types, pure log logic, storage adapter,
+ * best-effort recorder, local export helpers, Activity_Log panel, popup wiring,
+ * and the four Source_Action integration touch-points.
+ */
+const SPEC_08_SOURCE_FILES = [
+  'src/types/index.ts',
+  'src/lib/activity-log.ts',
+  'src/lib/activity-log-storage.ts',
+  'src/lib/activity-recorder.ts',
+  'src/lib/activity-export.ts',
+  'src/components/ActivityLog.tsx',
+  'src/popup/Popup.tsx',
+  'src/components/Onboarding.tsx',
+  'src/components/ReviewQueue.tsx',
+  'src/components/DraftCoPilot.tsx',
+];
+
+/**
+ * Files whose Spec 08-A behavior must stay local-only. Popup.tsx is excluded from
+ * this narrower network scan because it legitimately contains the pre-existing
+ * public status check wiring; the Activity_Log implementation itself is local-only.
+ */
+const SPEC_08_LOCAL_ONLY_FILES = [
+  'src/lib/activity-log.ts',
+  'src/lib/activity-log-storage.ts',
+  'src/lib/activity-recorder.ts',
+  'src/lib/activity-export.ts',
+  'src/components/ActivityLog.tsx',
+];
+
+/**
+ * Deliberately specific forbidden tokens for active network/automation surfaces.
+ * Comments are stripped before scanning so compliance prose like "no chrome.downloads"
+ * does not false-positive.
+ */
+const SPEC_08_FORBIDDEN_ACTIVE_TOKENS = [
+  'fetch(',
+  'authenticatedfetch(',
+  'xmlhttprequest(',
+  'chrome.downloads',
+  'chrome.alarms',
+  'chrome.notifications',
+  'chrome.tabs.create',
+  'reddit.com',
+  'old.reddit.com',
+  '/api/submit',
+  '/api/comment',
+  '/api/vote',
+  '/v1/draft',
+  '/v1/review',
+  '/v1/queue',
+  'autopost',
+  'auto-post',
+  'auto_submit',
+  'firecrawl',
+  'scraping',
+  'ip rotation',
+  'openai',
+  'anthropic',
+];
+
+function stripComments(content: string): string {
+  return content.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+}
+
+function readProductionSource(relativePath: string): string {
+  return readFileSync(resolve(EXTENSION_ROOT, relativePath), 'utf-8');
+}
+
+describe('Spec 08-A — Activity Log permission containment', () => {
+  const manifest = JSON.parse(
+    readFileSync(resolve(EXTENSION_ROOT, 'manifest.json'), 'utf-8')
+  );
+
+  it('keeps manifest.permissions exactly ["storage"] (no downloads/alarms/notifications/tabs/scripting/activeTab)', () => {
+    expect(manifest.permissions).toEqual(['storage']);
+    expect(manifest.permissions).not.toContain('downloads');
+    expect(manifest.permissions).not.toContain('alarms');
+    expect(manifest.permissions).not.toContain('notifications');
+    expect(manifest.permissions).not.toContain('tabs');
+    expect(manifest.permissions).not.toContain('scripting');
+    expect(manifest.permissions).not.toContain('activeTab');
+  });
+
+  it('keeps host_permissions exactly the approved entries (no reddit.com host)', () => {
+    expect(manifest.host_permissions).toEqual([
+      'https://*.workers.dev/*',
+      'http://localhost/*',
+      'http://127.0.0.1/*',
+    ]);
+  });
+
+  it('still declares no content_scripts', () => {
+    expect(manifest.content_scripts).toBeUndefined();
+  });
+
+  it('the manifest contains no Spec 08-A forbidden scope tokens', () => {
+    const manifestRaw = readFileSync(resolve(EXTENSION_ROOT, 'manifest.json'), 'utf-8').toLowerCase();
+    for (const token of SPEC_08_FORBIDDEN_ACTIVE_TOKENS) {
+      expect(manifestRaw.includes(token), `manifest references "${token}"`).toBe(false);
+    }
+  });
+});
+
+describe('Spec 08-A — Activity Log local-only scope exclusion', () => {
+  it('Spec 08-A production files contain no active forbidden network/automation tokens', () => {
+    for (const relativePath of SPEC_08_SOURCE_FILES) {
+      const content = stripComments(readProductionSource(relativePath)).toLowerCase();
+      for (const token of SPEC_08_FORBIDDEN_ACTIVE_TOKENS) {
+        expect(
+          content.includes(token),
+          `${relativePath} unexpectedly references active forbidden token "${token}"`
+        ).toBe(false);
+      }
+    }
+  });
+
+  it('Activity Log local-only files make no network call and use no Worker/Reddit/AI surface', () => {
+    for (const relativePath of SPEC_08_LOCAL_ONLY_FILES) {
+      const content = stripComments(readProductionSource(relativePath)).toLowerCase();
+      expect(content.includes('fetch('), `${relativePath} calls fetch(`).toBe(false);
+      expect(content.includes('authenticatedfetch('), `${relativePath} calls authenticatedFetch(`).toBe(false);
+      expect(content.includes('xmlhttprequest('), `${relativePath} instantiates XMLHttpRequest`).toBe(false);
+      expect(content.includes('reddit.com'), `${relativePath} references reddit.com`).toBe(false);
+      expect(content.includes('openai'), `${relativePath} references OpenAI`).toBe(false);
+      expect(content.includes('anthropic'), `${relativePath} references Anthropic`).toBe(false);
+    }
+  });
+
+  it('activity-export.ts uses only local clipboard and Blob/ObjectURL anchor delivery', () => {
+    const exportFile = stripComments(readProductionSource('src/lib/activity-export.ts')).toLowerCase();
+
+    expect(exportFile).toContain('navigator.clipboard.writetext');
+    expect(exportFile).toContain('new blob');
+    expect(exportFile).toContain('url.createobjecturl');
+    expect(exportFile).toContain("document.createelement('a')");
+    expect(exportFile).toContain('url.revokeobjecturl');
+
+    expect(exportFile.includes('chrome.downloads'), 'activity-export.ts uses chrome.downloads').toBe(false);
+    expect(exportFile.includes('fetch('), 'activity-export.ts calls fetch(').toBe(false);
+    expect(exportFile.includes('authenticatedfetch('), 'activity-export.ts calls authenticatedFetch(').toBe(false);
+  });
+
+  it('activity storage and recorder persist only through chrome.storage.local and never through network or extension automation APIs', () => {
+    for (const relativePath of ['src/lib/activity-log-storage.ts', 'src/lib/activity-recorder.ts']) {
+      const content = stripComments(readProductionSource(relativePath)).toLowerCase();
+
+      if (relativePath.endsWith('activity-log-storage.ts')) {
+        expect(content).toContain('chrome.storage.local');
+      }
+
+      expect(content.includes('fetch('), `${relativePath} calls fetch(`).toBe(false);
+      expect(content.includes('authenticatedfetch('), `${relativePath} calls authenticatedFetch(`).toBe(false);
+      expect(content.includes('chrome.downloads'), `${relativePath} uses chrome.downloads`).toBe(false);
+      expect(content.includes('chrome.alarms'), `${relativePath} uses chrome.alarms`).toBe(false);
+      expect(content.includes('chrome.notifications'), `${relativePath} uses chrome.notifications`).toBe(false);
+      expect(content.includes('reddit.com'), `${relativePath} references reddit.com`).toBe(false);
+    }
+  });
+});

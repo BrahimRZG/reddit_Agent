@@ -8,6 +8,7 @@ import {
   validateAcknowledgement,
 } from '../lib/onboarding';
 import { setAcknowledgement, OnboardingStorageError } from '../lib/onboarding-storage';
+import { recordActivity } from '../lib/activity-recorder';
 
 interface OnboardingProps {
   /**
@@ -74,6 +75,9 @@ export function Onboarding({ record, onComplete }: OnboardingProps) {
 
     try {
       await setAcknowledgement(buildAcknowledgementRecord());
+      // Best-effort, non-blocking compliance log (Spec 08-A). Fire-and-forget:
+      // never awaited and never gates onComplete; only on the success path.
+      recordActivity('onboarding_completed', { detail: `version ${ACKNOWLEDGEMENT_VERSION}` });
       onComplete?.();
     } catch (err) {
       // Req 4.6: write failure shows an inline error and stays incomplete.

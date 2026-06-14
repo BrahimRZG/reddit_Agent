@@ -13,6 +13,7 @@ import type {
 } from '../types';
 import { MAX_SOURCE_LENGTH } from '../types';
 import { generateDraft, validateDraftInput } from '../lib/draft-generator';
+import { recordActivity } from '../lib/activity-recorder';
 
 /** Human-readable labels for each of the exactly-three Reply_Modes (Req 2.1, 2.4). */
 const MODE_OPTIONS: ReadonlyArray<{ value: DraftMode; label: string; hint: string }> = [
@@ -270,6 +271,8 @@ export function DraftCoPilot() {
     }
     try {
       await navigator.clipboard.writeText(result.draftText);
+      // Best-effort, non-blocking compliance log (Spec 08-A) — only on success.
+      recordActivity('draft_copied', { detail: 'Draft Co-Pilot draft' });
       setCopied(true);
     } catch {
       // Clipboard write failed; manual selection remains the fallback (Req 10.5).

@@ -8,6 +8,7 @@ import { ACKNOWLEDGEMENT_VERSION, REQUIRED_ACKNOWLEDGEMENT_ITEM_IDS } from '../l
 import type { AcknowledgementRecord } from '../types';
 import { generateDraft, validateDraftInput } from '../lib/draft-generator';
 import { ReviewQueue } from '../components/ReviewQueue';
+import { ActivityLog } from '../components/ActivityLog';
 
 // Spec 06, Task 6.15: wrap the REAL draft-generator functions as spies so we can
 // assert they are never invoked before the OnboardingGate completes (Req 11.2).
@@ -36,6 +37,18 @@ vi.mock('../components/ReviewQueue', () => ({
   ReviewQueue: vi.fn(() => <div data-testid="review-queue-mock" />),
 }));
 const mockReviewQueue = vi.mocked(ReviewQueue);
+
+// Spec 08-A, Task 7.5: mock the ActivityLog component (mirroring the ReviewQueue
+// mock above) so the popup gate tests can observe whether the panel MOUNTS without
+// exercising its internals (covered by ActivityLog.test.tsx). The mock renders a
+// lightweight sentinel <div data-testid="activity-log-mock" /> and is a vi.fn, so
+// we can assert both its presence/absence in the DOM and its mount call-count.
+// Because the real ActivityLog runs `readLog()` on mount, a 0 mount-count proves the
+// real log's read/append/clear logic could never have fired before the gate opened.
+vi.mock('../components/ActivityLog', () => ({
+  ActivityLog: vi.fn(() => <div data-testid="activity-log-mock" />),
+}));
+const mockActivityLog = vi.mocked(ActivityLog);
 
 const ONBOARDING_KEY = STORAGE_KEYS.ONBOARDING;
 
@@ -341,5 +354,113 @@ describe('Popup — Review Queue load logic is not invoked before gate completio
 
     fireEvent.click(settingsButton);
     expect(openOptionsPage).toHaveBeenCalledTimes(1);
+  });
+});
+
+
+describe('Popup — Activity Log gate behavior (Spec 08-A, Req 10.1–10.5)', () => {
+  // Feature: activity-log-export, Property 14: Gate Containment — the Activity_Log
+  // lives inside the OnboardingGate and does not mount/render/run any log logic
+  // (including readLog-on-mount) until Compliance_Onboarding is complete, and fails
+  // closed on read_error. Completing onboarding preserves the Spec 05 Intent_Scanner,
+  // the Spec 06 Draft_Co_Pilot, and the Spec 07 Review_Queue sections, below which the
+  // Activity_Log renders as a distinct section (Req 10.1–10.5).
+
+  it('incomplete onboarding does not render ActivityLog; onboarding screen still shows', async () => {
+    // No onboarding record → incomplete (missing).
+    render(<Popup />);
+
+    // The Onboarding_Screen is shown instead of the gated app body.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /accept and continue/i })).toBeTruthy()
+    );
+
+    // The Activity_Log panel is not mounted and its sentinel is absent (Req 10.2).
+    expect(screen.queryByTestId('activity-log-mock')).toBeNull();
+    expect(mockActivityLog).not.toHaveBeenCalled();
+  });
+
+  it('read_error onboarding does not render ActivityLog', async () => {
+    // Drive OnboardingGate into its fail-closed read_error state by making the
+    // onboarding storage read throw; the gate never renders children (Req 10.2).
+    mockGet.mockRejectedValueOnce(new Error('read failed'));
+
+    render(<Popup />);
+
+    // The recoverable read-error UI is shown (text + Retry), not the app body.
+    await waitFor(() =>
+      expect(screen.getByText(/couldn'?t read your onboarding status/i)).toBeTruthy()
+    );
+    expect(screen.getByRole('button', { name: /retry/i })).toBeTruthy();
+
+    // The Activity_Log panel is not mounted in the read_error state (Req 10.2).
+    expect(screen.queryByTestId('activity-log-mock')).toBeNull();
+    expect(mockActivityLog).not.toHaveBeenCalled();
+  });
+
+  it('completed onboarding renders ActivityLog, below ReviewQueue, preserving the other sections', async () => {
+    store.set(ONBOARDING_KEY, completeRecord);
+
+    render(<Popup />);
+
+    // Normal app body renders once onboarding is complete (Req 10.3).
+    await waitFor(() => expect(screen.getByText(/connected/i)).toBeTruthy());
+
+    // The Activity_Log panel is mounted (Req 10.1, 10.3).
+    const activityLog = screen.getByTestId('activity-log-mock');
+    expect(activityLog).toBeTruthy();
+
+    // The Spec 05 Intent_Scanner, Spec 06 Draft_Co_Pilot, and Spec 07 Review_Queue
+    // sections are all preserved and still render (Req 10.5).
+    const intentHeading = screen.getByText(/intent scanner/i);
+    const draftPanel = screen.getByTestId('draft-co-pilot');
+    const reviewQueue = screen.getByTestId('review-queue-mock');
+    expect(intentHeading).toBeTruthy();
+    expect(draftPanel).toBeTruthy();
+    expect(reviewQueue).toBeTruthy();
+
+    // DOM ordering (Req 10.4): the Activity_Log renders as a distinct section BELOW
+    // the Review_Queue (which itself sits below Intent_Scanner and Draft_Co_Pilot).
+    //   Intent_Scanner → Draft_Co_Pilot → Review_Queue → Activity_Log
+    expect(
+      intentHeading.compareDocumentPosition(draftPanel) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      draftPanel.compareDocumentPosition(reviewQueue) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      reviewQueue.compareDocumentPosition(activityLog) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it('incomplete onboarding → ActivityLog mount spy not called (readLog never runs)', async () => {
+    // No onboarding record → incomplete.
+    render(<Popup />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /accept and continue/i })).toBeTruthy()
+    );
+
+    // The panel never mounted, so its real readLog-on-mount effect never ran.
+    expect(mockActivityLog).toHaveBeenCalledTimes(0);
+  });
+
+  it('introduces no post/submit/comment/vote/publish/auto-post controls and uses no chrome.downloads', async () => {
+    store.set(ONBOARDING_KEY, completeRecord);
+
+    render(<Popup />);
+
+    await waitFor(() => expect(screen.getByText(/connected/i)).toBeTruthy());
+
+    // No control anywhere in the popup carries a posting/automation label.
+    const forbidden = /\b(post|submit|comment|upvote|downvote|vote|publish|auto-?post)\b/i;
+    for (const btn of screen.getAllByRole('button')) {
+      expect(btn.textContent ?? '').not.toMatch(forbidden);
+    }
+
+    // The stubbed chrome surface exposes no `downloads` API, and nothing on this
+    // path attempts to use one (the Activity_Log wiring stays storage-only).
+    const chromeStub = (globalThis as unknown as { chrome?: Record<string, unknown> }).chrome;
+    expect(chromeStub && 'downloads' in chromeStub).toBe(false);
   });
 });
