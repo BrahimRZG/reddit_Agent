@@ -8,6 +8,7 @@ import { DraftCoPilot } from '../components/DraftCoPilot';
 import { ConnectionBadge } from '../components/ConnectionBadge';
 import { OnboardingGate } from '../components/OnboardingGate';
 import { IntentScanner } from '../components/IntentScanner';
+import { ActivityLog } from '../components/ActivityLog';
 
 /** Current extension version — read from manifest at build time */
 const EXTENSION_VERSION = '1.0.0';
@@ -150,6 +151,14 @@ export function Popup() {
             queue read/write/mutation logic (including readQueue) until
             Compliance_Onboarding is complete (Req 11.1–11.4). */}
         <ReviewQueue />
+
+        {/* Activity Log — local, Extension-UI-only record of compliance-relevant
+            Operator actions, with JSON/Markdown export (Spec 08-A). Rendered inside
+            the gate, below the Intent_Scanner, the Draft_Co-Pilot, and the
+            Review_Queue, as a distinct section so it stays unmounted and runs no
+            log read/append/trim/clear logic (including readLog) until
+            Compliance_Onboarding is complete (Req 10.1–10.4). */}
+        <ActivityLog />
 
         {/* Version info */}
         <p className="mt-3 text-[10px] text-gray-400">v{EXTENSION_VERSION}</p>
